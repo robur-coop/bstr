@@ -1,0 +1,10 @@
+(library
+ (name bstr)
+ (public_name bstr)
+ (modules bstr)
+ (foreign_stubs
+  (language c)
+  (names bstr)
+  (flags
+   (:standard -Wcast-align)))
+ (wrapped false))

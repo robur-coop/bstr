@@ -1,0 +1,9 @@
+(library
+ (name test)
+ (modules test)
+ (libraries unix))
+
+(test
+ (name t)
+ (modules t)
+ (libraries bstr test))

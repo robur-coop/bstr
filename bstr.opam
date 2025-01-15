@@ -1,0 +1,18 @@
+opam-version: "2.0"
+name:         "bstr"
+maintainer:   [ "Romain Calascibetta <romain.calascibetta@gmail.com>" ]
+authors:      [ "Romain Calascibetta <romain.calascibetta@gmail.com>" ]
+homepage:     "https://git.robur.coop/robur/bstr"
+bug-reports:  "https://git.robur.coop/robur/bstr"
+dev-repo:     "git+https://github.com/robur-coop/bstr"
+doc:          "https://robur-coop.github.io/bstr/"
+license:      "MIT"
+
+build: [ "dune" "build" "-p" name "-j" jobs ]
+run-test: [ "dune" "runtest" "-p" name "-j" jobs ]
+
+depends: [
+  "ocaml"       {>= "4.14.0"}
+  "dune"        {>= "3.5.0"}
+]
+x-maintenance-intent: [ "(latest)" ]
