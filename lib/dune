@@ -1,10 +1,52 @@
 (library
  (name bstr)
- (public_name bstr)
  (modules bstr)
+ (public_name bstr)
  (foreign_stubs
   (language c)
   (names bstr)
   (flags
    (:standard -Wcast-align)))
+ (instrumentation
+  (backend bisect_ppx))
+ (wrapped false))
+
+(library
+ (name slice)
+ (modules slice)
+ (public_name slice)
+ (instrumentation
+  (backend bisect_ppx))
+ (wrapped false))
+
+(library
+ (name slice_bytes)
+ (modules slice_bytes)
+ (public_name slice.bytes)
+ (libraries slice)
+ (wrapped false))
+
+; (rule
+;  (target slice_string.ml)
+;  (action
+;   (run ./../bin/generate.exe -m S -n String -i %{dep:slice.ml.in} -o
+;     %{target})))
+
+(rule
+ (target slice_bytes.ml)
+ (action
+  (run ./../bin/generate.exe -m S -n Bytes -i %{dep:slice.ml.in} -o %{target})))
+
+(rule
+ (target slice_bstr.ml)
+ (action
+  (run ./../bin/generate.exe -m S -n Bstr -i %{dep:slice.ml.in} -o %{target})))
+
+(library
+ (name bin)
+ (modules bin)
+ (public_name bin)
+ (libraries bstr slice)
+ (instrumentation
+  (backend bisect_ppx))
  (wrapped false))

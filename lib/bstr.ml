@@ -150,6 +150,24 @@ let make len chr =
   (* [Obj.magic] instead of [Char.code]? *)
   bstr
 
+let init len fn =
+  let bstr = create len in
+  for i = 0 to len - 1 do
+    unsafe_set bstr i (fn i)
+  done;
+  bstr
+
+let copy src =
+  let len = length src in
+  let bstr = create len in
+  unsafe_memcpy src 0 bstr 0 len;
+  bstr
+
+let chop ?(rev = false) bstr =
+  if length bstr == 0 then None
+  else if not rev then Some (unsafe_get bstr 0)
+  else Some (unsafe_get bstr (length bstr - 1))
+
 let get_int64_ne bstr idx =
   if idx < 0 || idx > length bstr - 8 then invalid_arg "Bstr.get_int64_ne";
   unsafe_get_int64_ne bstr idx
@@ -236,21 +254,15 @@ let set_uint16_ne = set_int16_ne
 let set_uint16_be = set_int16_be
 let set_uint16_le = set_int16_le
 
-external sub : t -> off:int -> len:int -> t = "caml_ba_sub"
+external unsafe_sub : t -> (int[@untagged]) -> (int[@untagged]) -> t
+  = "bstr_bytecode_unsafe_sub" "bstr_native_unsafe_sub"
+
+let sub bstr ~off ~len =
+  if off < 0 || len < 0 || off > length bstr - len then invalid_arg "Bstr.sub";
+  unsafe_sub bstr off len
 
 let unsafe_blit src ~src_off dst ~dst_off ~len =
-  let len0 = len land 3 in
-  let len1 = len lsr 2 in
-  for i = 0 to len1 - 1 do
-    let i = i * 4 in
-    let v = unsafe_get_int32_ne src (src_off + i) in
-    unsafe_set_int32_ne dst (dst_off + i) v
-  done;
-  for i = 0 to len0 - 1 do
-    let i = (len1 * 4) + i in
-    let v = unsafe_get_uint8 src (src_off + i) in
-    unsafe_set_uint8 dst (dst_off + i) v
-  done
+  unsafe_memmove src src_off dst dst_off len
 
 let blit src ~src_off dst ~dst_off ~len =
   if
@@ -321,6 +333,18 @@ let of_string str =
     ~src_off:0 bstr ~dst_off:0 ~len;
   bstr
 
+let string ?(off = 0) ?len str =
+  let len =
+    match len with Some len -> len | None -> String.length str - off
+  in
+  if off < 0 || len < 0 || off > String.length str - len then
+    invalid_arg "Bstr.string";
+  let bstr = create len in
+  unsafe_blit_from_bytes
+    (Bytes.unsafe_of_string str)
+    ~src_off:off bstr ~dst_off:0 ~len;
+  bstr
+
 let unsafe_sub_string bstr src_off len =
   let buf = Bytes.create len in
   unsafe_blit_to_bytes bstr ~src_off buf ~dst_off:0 ~len;
@@ -342,8 +366,21 @@ let is_prefix ~affix bstr =
     let max_idx_affix = len_affix - 1 in
     let rec go idx =
       if idx > max_idx_affix then true
-      else if affix.[idx] != bstr.{idx} then false
-      else go (succ idx)
+      else if String.unsafe_get affix idx != unsafe_get bstr idx then false
+      else go (idx + 1)
+    in
+    go 0
+
+let starts_with ~prefix bstr =
+  let len_prefix = length prefix in
+  let len_bstr = length bstr in
+  if len_prefix > len_bstr then false
+  else
+    let max_idx_prefix = len_prefix - 1 in
+    let rec go idx =
+      if idx > max_idx_prefix then true
+      else if unsafe_get prefix idx != unsafe_get bstr idx then false
+      else go (idx + 1)
     in
     go 0
 
@@ -360,7 +397,7 @@ let is_infix ~affix bstr =
       else if k > 0 then
         if affix.[k] == bstr.{idx + k} then go idx (succ k) else go (succ idx) 0
       else if affix.[0] = bstr.{idx} then go idx 1
-      else go (succ idx) 0
+      else go (idx + 1) 0
     in
     go 0 0
 
@@ -373,7 +410,22 @@ let is_suffix ~affix bstr =
       if idx > max_idx_affix then true
       else if affix.[max_idx_affix - idx] != bstr.{max_idx_bstr - idx} then
         false
-      else go (succ idx)
+      else go (idx + 1)
+    in
+    go 0
+
+let ends_with ~suffix bstr =
+  let max_idx_suffix = length suffix - 1 in
+  let max_idx_bstr = length bstr - 1 in
+  if max_idx_suffix > max_idx_bstr then false
+  else
+    let rec go idx =
+      if idx > max_idx_suffix then true
+      else if
+        unsafe_get suffix (max_idx_suffix - idx)
+        != unsafe_get bstr (max_idx_bstr - idx)
+      then false
+      else go (idx + 1)
     in
     go 0
 
@@ -444,7 +496,7 @@ let with_index_range ?(first = 0) ?last bstr =
   else if first == 0 && last = max_idx then bstr
   else sub bstr ~off:first ~len:(last + 1 - first)
 
-let is_white chr = chr == ' '
+let is_white chr = chr == ' ' || chr == '\t'
 
 let trim ?(drop = is_white) bstr =
   let len = length bstr in
@@ -499,115 +551,29 @@ let rspan ?(min = 0) ?(max = max_int) ?(sat = Fun.const true) bstr =
       let k = len - max in
       if k < 0 then 0 else k
     in
-    let need_idx = max_idx - min in
+    let need_idx = len - min - 1 in
     let rec go idx =
       if idx >= min_idx && sat bstr.{idx} then go (pred idx)
       else if idx > need_idx || idx == max_idx then (bstr, empty)
-      else if idx == -1 then (empty, bstr)
+      else if idx < 0 then (empty, bstr)
       else
         let cut = idx + 1 in
         (sub bstr ~off:0 ~len:cut, sub bstr ~off:cut ~len:(len - cut))
     in
-    go 0
+    go max_idx
 
 let span ?(rev = false) ?min ?max ?sat bstr =
   match rev with
   | true -> rspan ?min ?max ?sat bstr
   | false -> fspan ?min ?max ?sat bstr
 
-let ftake ?(min = 0) ?(max = max_int) ?(sat = Fun.const true) bstr =
-  if min < 0 then invalid_arg "Bstr.ftake";
-  if max < 0 then invalid_arg "Bstr.ftake";
-  if min > max || max == 0 then empty
-  else
-    let len = length bstr in
-    let max_idx = len - 1 in
-    let max_idx =
-      let k = max - 1 in
-      if k > max_idx then max_idx else k
-    in
-    let need_idx = min in
-    let rec go idx =
-      if idx <= max_idx && sat bstr.{idx} then go (succ idx)
-      else if idx < need_idx || idx == 0 then empty
-      else if idx == len then bstr
-      else sub bstr ~off:0 ~len:idx
-    in
-    go 0
-
-let rtake ?(min = 0) ?(max = max_int) ?(sat = Fun.const true) bstr =
-  if min < 0 then invalid_arg "Bstr.rtake";
-  if max < 0 then invalid_arg "Bstr.rtake";
-  if min > max || max == 0 then empty
-  else
-    let len = length bstr in
-    let max_idx = len - 1 in
-    let min_idx =
-      let k = len - max in
-      if k < 0 then 0 else k
-    in
-    let need_idx = max_idx - min in
-    let rec go idx =
-      if idx >= min_idx && sat bstr.{idx} then go (pred idx)
-      else if idx > need_idx || idx == max_idx then empty
-      else if idx == -1 then bstr
-      else
-        let cut = idx + 1 in
-        sub bstr ~off:cut ~len:(len - cut)
-    in
-    go 0
-
 let take ?(rev = false) ?min ?max ?sat bstr =
-  match rev with
-  | true -> rtake ?min ?max ?sat bstr
-  | false -> ftake ?min ?max ?sat bstr
-
-let fdrop ?(min = 0) ?(max = max_int) ?(sat = Fun.const true) bstr =
-  if min < 0 then invalid_arg "Bstr.fdrop";
-  if max < 0 then invalid_arg "Bstr.fdrop";
-  if min > max || max == 0 then bstr
-  else
-    let len = length bstr in
-    let max_idx = len - 1 in
-    let max_idx =
-      let k = max - 1 in
-      if k > max_idx then max_idx else k
-    in
-    let need_idx = min in
-    let rec go idx =
-      if idx <= max_idx && sat bstr.{idx} then go (succ idx)
-      else if idx < need_idx || idx == 0 then bstr
-      else if idx == len then bstr
-      else sub bstr ~off:idx ~len:(len - idx)
-    in
-    go 0
-
-let rdrop ?(min = 0) ?(max = max_int) ?(sat = Fun.const true) bstr =
-  if min < 0 then invalid_arg "Bstr.rdrop";
-  if max < 0 then invalid_arg "Bstr.rdrop";
-  if min > max || max == 0 then bstr
-  else
-    let len = length bstr in
-    let max_idx = len - 1 in
-    let min_idx =
-      let k = len - max in
-      if k < 0 then 0 else k
-    in
-    let need_idx = max_idx - min in
-    let rec go idx =
-      if idx >= min_idx && sat bstr.{idx} then go (pred idx)
-      else if idx > need_idx || idx == max_idx then bstr
-      else if idx == -1 then empty
-      else
-        let cut = idx + 1 in
-        sub bstr ~off:0 ~len:cut
-    in
-    go 0
+  let a, b = span ~rev ?min ?max ?sat bstr in
+  if rev then b else a
 
 let drop ?(rev = false) ?min ?max ?sat bstr =
-  match rev with
-  | true -> rdrop ?min ?max ?sat bstr
-  | false -> fdrop ?min ?max ?sat bstr
+  let a, b = span ~rev ?min ?max ?sat bstr in
+  if rev then a else b
 
 let shift bstr off =
   if off > length bstr then invalid_arg "Bstr.shift";
@@ -684,265 +650,3 @@ let of_seq seq =
     incr n
   in
   Seq.iter fn seq; sub !buf ~off:0 ~len:!n
-
-module Witness = struct
-  type (_, _) eq = Refl : ('a, 'a) eq
-  type _ equality = ..
-
-  module type Inst = sig
-    type t
-    type _ equality += Eq : t equality
-  end
-
-  type 'a t = (module Inst with type t = 'a)
-
-  let make : type a. unit -> a t =
-   fun () ->
-    let module Inst = struct
-      type t = a
-      type _ equality += Eq : t equality
-    end in
-    (module Inst)
-
-  let _eq : type a b. a t -> b t -> (a, b) eq option =
-   fun (module A) (module B) -> match A.Eq with B.Eq -> Some Refl | _ -> None
-end
-
-module Pkt = struct
-  type bigstring = t
-  type endianness = Big_endian | Little_endian | Native_endian
-
-  type _ t =
-    | Primary : 'a primary -> 'a t
-    | Record : 'a record -> 'a t
-    | Variant : 'a variant -> 'a t
-
-  and _ primary =
-    | Char : char primary
-    | UInt8 : int primary
-    | Int8 : int primary
-    | UInt16 : endianness -> int primary
-    | Int16 : endianness -> int primary
-    | Int32 : endianness -> int32 primary
-    | Int64 : endianness -> int64 primary
-    | Var_int31 : int primary
-    | Var_int63 : int primary
-    | Bytes : int -> string primary
-    | CString : string primary
-    | Until : char -> string primary
-
-  and _ a_case = C0 : 'a case0 -> 'a a_case | C1 : ('a, 'b) case1 -> 'a a_case
-
-  and _ case_v =
-    | CV0 : 'a case0 -> 'a case_v
-    | CV1 : ('a, 'b) case1 * 'b -> 'a case_v
-
-  and 'a case0 = { ctag0: int; c0: 'a }
-
-  and ('a, 'b) case1 = {
-      ctag1: int
-    ; ctype1: 'b t
-    ; cwitn1: 'b Witness.t
-    ; c1: 'b -> 'a
-  }
-
-  and 'a record = { rwit: 'a Witness.t; rfields: 'a fields_and_constr }
-
-  and 'a fields_and_constr =
-    | Fields : ('a, 'b) fields * 'b -> 'a fields_and_constr
-
-  and ('a, 'b) fields =
-    | F0 : ('a, 'a) fields
-    | F1 : ('a, 'b) field * ('a, 'c) fields -> ('a, 'b -> 'c) fields
-
-  and ('a, 'b) field = { ftype: 'b t; fget: 'a -> 'b }
-
-  and 'a variant = {
-      vwit: 'a Witness.t
-    ; vcases: 'a a_case array
-    ; vget: 'a -> 'a case_v
-  }
-
-  module Fields_folder (Acc : sig
-    type ('a, 'b) t
-  end) =
-  struct
-    type 'a t = {
-        nil: ('a, 'a) Acc.t
-      ; cons: 'b 'c. ('a, 'b) field -> ('a, 'c) Acc.t -> ('a, 'b -> 'c) Acc.t
-    }
-
-    let rec fold : type a c. a t -> (a, c) fields -> (a, c) Acc.t =
-     fun folder -> function
-      | F0 -> folder.nil
-      | F1 (f, fs) -> folder.cons f (fold folder fs)
-  end
-
-  (* decoder *)
-
-  module Record_decoder = Fields_folder (struct
-    type ('a, 'b) t = bigstring -> int ref -> 'b -> 'a
-  end)
-
-  type 'a decoder = bigstring -> int ref -> 'a
-
-  let decode_char bstr pos =
-    let idx = !pos in
-    incr pos; get bstr idx
-  [@@inline always]
-
-  let decode_uint8 bstr pos =
-    let idx = !pos in
-    incr pos; get_uint8 bstr idx
-  [@@inline always]
-
-  let decode_int8 bstr pos =
-    let idx = !pos in
-    incr pos; get_int8 bstr idx
-  [@@inline always]
-
-  let decode_uint16 e bstr pos =
-    let idx = !pos in
-    incr pos;
-    match e with
-    | Big_endian -> get_uint16_be bstr idx
-    | Little_endian -> get_uint16_le bstr idx
-    | Native_endian -> get_uint16_ne bstr idx
-  [@@inline always]
-
-  let decode_int16 e bstr pos =
-    let idx = !pos in
-    incr pos;
-    match e with
-    | Big_endian -> get_int16_be bstr idx
-    | Little_endian -> get_int16_le bstr idx
-    | Native_endian -> get_int16_ne bstr idx
-  [@@inline always]
-
-  let decode_int32 e bstr pos =
-    let idx = !pos in
-    incr pos;
-    match e with
-    | Big_endian -> get_int32_be bstr idx
-    | Little_endian -> get_int32_le bstr idx
-    | Native_endian -> get_int32_ne bstr idx
-  [@@inline always]
-
-  let decode_int64 e bstr pos =
-    let idx = !pos in
-    incr pos;
-    match e with
-    | Big_endian -> get_int64_be bstr idx
-    | Little_endian -> get_int64_le bstr idx
-    | Native_endian -> get_int64_ne bstr idx
-  [@@inline always]
-
-  let decode_bytes len bstr pos =
-    let off = !pos in
-    pos := !pos + len;
-    sub_string bstr ~off ~len
-
-  let rec decode : type a. a t -> a decoder = function
-    | Primary p -> prim p
-    | Record r -> record r
-    | Variant _ -> assert false
-
-  and prim : type a. a primary -> a decoder = function
-    | Char -> decode_char
-    | UInt8 -> decode_uint8
-    | Int8 -> decode_int8
-    | UInt16 e -> decode_uint16 e
-    | Int16 e -> decode_int16 e
-    | Int32 e -> decode_int32 e
-    | Int64 e -> decode_int64 e
-    | Bytes len -> decode_bytes len
-    | _ -> assert false
-
-  and record : type a. a record -> a decoder =
-   fun { rfields= Fields (fs, constr); _ } ->
-    let nil _bstr _pos fn = fn in
-    let cons { ftype; _ } k =
-      let decode = decode ftype in
-      fun bstr pos constr ->
-        let x = decode bstr pos in
-        let constr = constr x in
-        k bstr pos constr
-    in
-    let fn = Record_decoder.fold { nil; cons } fs in
-    fun bstr pos -> fn bstr pos constr
-
-  (* combinators *)
-
-  let char = Primary Char
-  let uint8 = Primary UInt8
-  let int8 = Primary Int8
-  let beuint16 = Primary (UInt16 Big_endian)
-  let leuint16 = Primary (UInt16 Little_endian)
-  let neuint16 = Primary (UInt16 Native_endian)
-  let beint16 = Primary (Int16 Big_endian)
-  let leint16 = Primary (Int16 Little_endian)
-  let neint16 = Primary (Int16 Native_endian)
-  let beint32 = Primary (Int32 Big_endian)
-  let leint32 = Primary (Int32 Little_endian)
-  let neint32 = Primary (Int32 Native_endian)
-  let beint64 = Primary (Int64 Big_endian)
-  let leint64 = Primary (Int64 Little_endian)
-  let neint64 = Primary (Int64 Native_endian)
-  let varint31 = Primary Var_int31
-  let varint63 = Primary Var_int63
-  let bytes len = Primary (Bytes len)
-  let cstring = Primary CString
-  let until byte = Primary (Until byte)
-
-  (* record *)
-
-  type ('a, 'b, 'c) open_record = ('a, 'c) fields -> 'b * ('a, 'b) fields
-
-  let field ftype fget = { ftype; fget }
-  let record : 'b -> ('a, 'b, 'b) open_record = fun c fs -> (c, fs)
-
-  let app : type a b c d.
-      (a, b, c -> d) open_record -> (a, c) field -> (a, b, d) open_record =
-   fun r f fs -> r (F1 (f, fs))
-
-  let sealr : type a b. (a, b, a) open_record -> a t =
-   fun r ->
-    let c, fs = r F0 in
-    let rwit = Witness.make () in
-    let sealed = { rwit; rfields= Fields (fs, c) } in
-    Record sealed
-
-  let ( |+ ) = app
-
-  (* variant *)
-
-  type 'a case_p = 'a case_v
-  type ('a, 'b) case = int -> 'a a_case * 'b
-
-  let case0 c0 ctag0 =
-    let c = { ctag0; c0 } in
-    (C0 c, CV0 c)
-
-  let case1 : type a b. b t -> (b -> a) -> (a, b -> a case_p) case =
-   fun ctype1 c1 ctag1 ->
-    let cwitn1 : b Witness.t = Witness.make () in
-    let c = { ctag1; ctype1; cwitn1; c1 } in
-    (C1 c, fun v -> CV1 (c, v))
-
-  type ('a, 'b, 'c) open_variant = 'a a_case list -> 'c * 'a a_case list
-
-  let variant c vs = (c, vs)
-
-  let app v c cs =
-    let fc, cs = v cs in
-    let c, f = c (List.length cs) in
-    (fc f, c :: cs)
-
-  let sealv v =
-    let vget, vcases = v [] in
-    let vwit = Witness.make () in
-    let vcases = Array.of_list (List.rev vcases) in
-    Variant { vwit; vcases; vget }
-
-  let ( |~ ) = app
-end

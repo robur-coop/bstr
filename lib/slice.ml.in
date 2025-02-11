@@ -1,0 +1,13 @@
+open Slice
+
+let empty = unsafe_make ~off:0 ~len:0 S.empty
+let length { len; _ } = len
+let get { off; buf; _ } idx = S.get buf (off + idx)
+
+let blit a b =
+  let len = Int.min a.len b.len in
+  S.blit a.buf a.off b.buf b.off len
+
+let fill { off; buf; _ } off' len' =
+  let off = off + off' in
+  S.fill buf off len'

@@ -3,7 +3,16 @@
 #include <caml/m.h>
 #include <caml/memory.h>
 #include <caml/mlvalues.h>
+#include <caml/custom.h>
+#include <caml/fail.h>
 #include <string.h>
+
+#ifndef CAML_BA_SUBARRAY
+#define CAML_BA_SUBARRAY 0x800
+#endif
+
+CAMLextern void caml_enter_blocking_section (void);
+CAMLextern void caml_leave_blocking_section (void);
 
 CAMLprim value bstr_bytecode_ptr(value va) {
   CAMLparam1(va);
@@ -22,10 +31,19 @@ intnat bstr_native_ptr(value va) {
 }
 
 #define bstr_uint8_off(ba, off) ((uint8_t *)Caml_ba_data_val(ba) + off)
+#define LEAVE_RUNTIME_OP_CUTOFF 4096
+#define is_mmaped(ba) ((ba)->flags & CAML_BA_MAPPED_FILE)
 
 void bstr_native_memcpy(value src, intnat src_off, value dst, intnat dst_off,
                         intnat len) {
+  int leave_runtime =
+    (len > LEAVE_RUNTIME_OP_CUTOFF*sizeof(long))
+    || is_mmaped(Caml_ba_array_val(src))
+    || is_mmaped(Caml_ba_array_val(dst));
+
+  if (leave_runtime) caml_enter_blocking_section();
   memcpy(bstr_uint8_off(src, src_off), bstr_uint8_off(dst, dst_off), len);
+  if (leave_runtime) caml_leave_blocking_section();
 }
 
 CAMLprim value bstr_bytecode_memcpy(value src, value src_off, value dst,
@@ -38,7 +56,14 @@ CAMLprim value bstr_bytecode_memcpy(value src, value src_off, value dst,
 
 void bstr_native_memmove(value src, intnat src_off, value dst, intnat dst_off,
                          intnat len) {
+  int leave_runtime =
+    (len > LEAVE_RUNTIME_OP_CUTOFF*sizeof(long))
+    || is_mmaped(Caml_ba_array_val(src))
+    || is_mmaped(Caml_ba_array_val(dst));
+
+  if (leave_runtime) caml_enter_blocking_section();
   memmove(bstr_uint8_off(src, src_off), bstr_uint8_off(dst, dst_off), len);
+  if (leave_runtime) caml_leave_blocking_section();
 }
 
 CAMLprim value bstr_bytecode_memmove(value src, value src_off, value dst,
@@ -87,6 +112,76 @@ CAMLprim value bstr_bytecode_memcmp(value src, value src_off, value dst,
 
 __MEM1(memset)
 __MEM1(memchr)
+
+#include <stdatomic.h>
+
+#define atomic_store_release(p, v) \
+  atomic_store_explicit((p), (v), memory_order_release)
+
+CAMLextern struct custom_operations caml_ba_ops;
+
+static void caml_ba_update_proxy(struct caml_ba_array * b1,
+                                 struct caml_ba_array * b2)
+{
+  struct caml_ba_proxy * proxy;
+  /* Nothing to do for un-managed arrays */
+  if ((b1->flags & CAML_BA_MANAGED_MASK) == CAML_BA_EXTERNAL) return;
+  if (b1->proxy != NULL) {
+    /* If b1 is already a proxy for a larger array, increment refcount of
+       proxy */
+    b2->proxy = b1->proxy;
+    (void)atomic_fetch_add(&b1->proxy->refcount, 1);
+  } else {
+    /* Otherwise, create proxy and attach it to both b1 and b2 */
+    proxy = malloc(sizeof(struct caml_ba_proxy));
+    if (proxy == NULL) caml_raise_out_of_memory();
+    atomic_store_release(&proxy->refcount, 2);
+    /* initial refcount: 2 = original array + sub array */
+    proxy->data = b1->data;
+    proxy->size =
+      b1->flags & CAML_BA_MAPPED_FILE ? caml_ba_byte_size(b1) : 0;
+    b1->proxy = proxy;
+    b2->proxy = proxy;
+  }
+}
+
+CAMLprim value bstr_native_unsafe_sub(value vbstr, intnat off, intnat len) {
+  CAMLparam1(vbstr);
+  CAMLlocal1(res);
+
+  char *sub = Caml_ba_array_val(vbstr)->data + off;
+  res = caml_alloc_custom_mem(&caml_ba_ops, SIZEOF_BA_ARRAY + sizeof(intnat), 0);
+  struct caml_ba_array *new;
+  new = Caml_ba_array_val(res);
+  new->data = sub;
+  new->num_dims = 1;
+  new->flags = Caml_ba_array_val(vbstr)->flags | CAML_BA_SUBARRAY;
+  new->proxy = NULL;
+  new->dim[0] = len;
+  Custom_ops_val(res) = Custom_ops_val(vbstr);
+  caml_ba_update_proxy(Caml_ba_array_val(vbstr), Caml_ba_array_val(res));
+  CAMLreturn (res);
+}
+
+CAMLprim value bstr_bytecode_unsafe_sub(value vbstr, value voff, value vlen) {
+  CAMLparam3(vbstr, voff, vlen);
+  CAMLlocal1(res);
+
+  intnat off = Unsigned_long_val(voff);
+  intnat len = Unsigned_long_val(vlen);
+  char *sub = Caml_ba_array_val(vbstr)->data + off;
+  res = caml_alloc_custom_mem(&caml_ba_ops, SIZEOF_BA_ARRAY + sizeof(intnat), 0);
+  struct caml_ba_array *new;
+  new = Caml_ba_array_val(res);
+  new->data = sub;
+  new->num_dims = 1;
+  new->flags = Caml_ba_array_val(vbstr)->flags | CAML_BA_SUBARRAY;
+  new->proxy = NULL;
+  new->dim[0] = len;
+  Custom_ops_val(res) = Custom_ops_val(vbstr);
+  caml_ba_update_proxy(Caml_ba_array_val(vbstr), Caml_ba_array_val(res));
+  CAMLreturn (res);
+}
 
 /* This function is **only** useful when accessing to a bigstring for an
  * architecture requiring alignment **and** for an OCaml executable in

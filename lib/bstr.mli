@@ -36,16 +36,54 @@
     - a bigstring can be manipulated by several threads/domains. Of course,
       parallel accesses must be protected, but you can be sure that the
       bigstring will not move throughout the process. Thus, its location in
-      memory can be shared by several computing units.
-    - it may be necessary, in system programming, to write to a particular zone
-      in order to interact with a device. In this case, the bigstring can be
-      found as an OCaml value bridging a special memory area (such as the
+      memory can be shared by several threads/domains.
+
+    One example is to "release" the GC lock when performing a calculation such
+    as a hash or checksum on a bigarray. Since the latter will not be moved by
+    the GC, if the elements required for the calculation are pre-allocated on
+    the C stack, it is possible to perform such a calculation on a Thread other
+    than the main OCaml thread.
+
+    - it may be necessary, in system programming, to write to a particular
+      address in order to interact with a device. In this case, the bigstring
+      can be found as an OCaml value bridging a special memory area (such as the
       framebuffer).
+
+    This is somewhat equivalent to [Unix.map_file]. The latter uses [mmap(3P)],
+    which asks the kernel for a special memory address. This address can be
+    related (via the kernel) to an area on your hard disk that corresponds to a
+    file. In the case of unikernels or embedded systems, it's quite common to
+    prepare bigstrings according to the devices available.
 
     A final feature of bigstring is that it can be seen as a slice. You can have
     another view of a bigstring that would be equally smaller. For example, the
-    {!val:sub} operation in particular doesn't copy your bigstring, but offers
-    you a "proxy" accessing the same memory area as the original bigstring.
+    {!val:sub} operation in particular {b doesn't copy} your bigstring, but
+    offers you a "proxy" accessing the same memory area as the original
+    bigstring.
+
+    This can be useful for decoding packets, extracting information such as
+    integers, without copying parts or all of the bigstring. For example, for a
+    TCP/IP packet, we'd like to decode certain information but also give a
+    slice of the bigstring that corresponds to the packet's payload (so that we
+    can process this payload without having to copy).
+
+    Finally, it may be interesting in an encoder of some kind to give
+    bigstrings that the user can write to, and check that these bigstrings are
+    part of a larger bigstring (in other words, these bigstrings come from a
+    {!val:sub} of a larger bigstring) that has been allocated beforehand.
+
+    Bigstrings therefore have certain advantages over bytes, but also some
+    disadvantages. Considering the former as elements you should use
+    systematically is not a good choice. However, we are sometimes forced to
+    use them (especially when communicating with embedded devices) and they can
+    be interesting for certain types of applications. This overview presents a
+    few cases, but examples exist in the OCaml community where the use of
+    bigstrings is justified.
+
+    In short, this library attempts to summarize everything that can be done
+    with bigstrings.
+
+    {2: Performance.}
 
     {1:pkt Encode & Decode packets.}
 
@@ -57,8 +95,8 @@ type t = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 
 val memcpy : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
 (** [memcpy src ~src_off dst ~dst_off ~len] copies [len] bytes from [src] to
-    [dst]. [src] must not overlap [dst]. Use {!val:memmove} if [src] & [dst] do
-    overlap. *)
+    [dst]. [src] {b must not} overlap [dst]. Use {!val:memmove} if [src] & [dst]
+    do overlap. *)
 
 val memmove : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
 (** [memmove src ~src_off dst ~dst_off ~len] copies [len] bytes from [src] to
@@ -83,21 +121,102 @@ val get : t -> int -> char
 
     @raise Invalid_argument if [i] is not an index of [bstr]. *)
 
+val set : t -> int -> char -> unit
+(** [set t i chr] modifies [t] in place, replacing the byte at index [i] with
+    [chr].
+
+    @raise Invalid_argument if [i] is not a valid index in [t]. *)
+
+val unsafe_get : t -> int -> char
+(** [unsafe_get t idx] is like {!val:get} except no bounds checking is
+    performed. *)
+
+val unsafe_set : t -> int -> char -> unit
+(** [unsafe_set t idx chr] is like {!val:set} except no bounds checking is
+    performed. *)
+
+val chop : ?rev:bool -> t -> char option
+
 val create : int -> t
+(** [create len] returns a new byte sequence of length [len]. The sequence
+    {b is unitialized} and contains arbitrary bytes. *)
+
 val make : int -> char -> t
+(** [make len chr] is {!type:t} of length [len] with each index holding the
+    character [chr]. *)
+
 val of_string : string -> t
+(** [of_string str] returns a new {!type:t} that contains the contents of the
+    given string [str]. *)
+
+val string : ?off:int -> ?len:int -> string -> t
+(** [string ~off ~len str] is the sub-buffer of [str] that starts at position
+    [off] (defaults to [0]) and stops at position [off + len] (defaults to
+    [String.length str]). [str] is fully-replaced by a fresh allocated
+    {!type:t}. *)
+
 val fill : t -> off:int -> len:int -> char -> unit
+(** [fill t off len chr] modifies [t] in place, replacing [len] characters with
+    [chr], starting at [off].
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [t]. *)
+
+val init : int -> (int -> char) -> t
+(** [init len fn] returns a fresh byte sequence of length [len], with character
+    [idx] initialized to the result of [fn idx] (in increasing index order). *)
+
+val copy : t -> t
+(** [copy t] returns a new byte sequence that contains the same bytes as the
+    argument. *)
+
+(** {2 Copy operation from one byte sequence to another.} *)
+
 val blit : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** [blit src ~src_off dst ~dst_off ~len] copies [len] bytes from byte sequence
+    [src], starting at index [src_off], to byte sequence [dst], starting at
+    index [dst_off]. It works correctly even if [src] and [dst] are (physically)
+    the same byte sequence, and the source and destination intervals overlap.
+
+    @raise Invalid_argument
+      if [src_pos] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
 
 val blit_from_string :
   string -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** Just like {!val:blit}, but with a string as source one.
+
+    {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
+    is used to make the copy.
+
+    @raise Invalid_argument
+      if [src_pos] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
 
 val blit_from_bytes :
   bytes -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** Just like {!val:blit}, but with a bytes as source one.
+
+    {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
+    is used to make the copy.
+
+    @raise Invalid_argument
+      if [src_pos] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
+
+val blit_to_bytes : t -> src_off:int -> bytes -> dst_off:int -> len:int -> unit
+(** [blit_to_bytes src ~src_off dst ~dst_off ~len] copies [len] bytes from
+    [src], starting at index [src_off], to byte sequence [dst], starting at
+    index [dst_off].
+
+    {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
+    is used to make the copy.
+
+    @raise Invalid_argument
+      if [src_off] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
 
 (*
-val init : int -> (int -> char) -> t
-val copy : t -> t
 val extend : t -> int -> int -> t
 val concat : t -> t list -> t
 val cat : t -> t -> t
@@ -112,8 +231,9 @@ val contains : t -> ?rev:bool -> ?from:int -> char -> bool
 val compare : t -> t -> int
 val starts_with : prefix:string -> t -> bool
 val ends_with : suffix:string -> t -> bool
-val overlap : t -> t -> (int * int * int) option
 *)
+
+(** {2 Decode integers from a byte sequence.} *)
 
 val get_int8 : t -> int -> int
 (** [get_int8 bstr i] is [bstr]'s signed 8-bit integer starting at byte index
@@ -171,31 +291,81 @@ val get_int64_be : t -> int -> int64
 (** [get_int64_be bstr i] is [bstr]'s big-endian 64-bit integer starting at byte
     index [i]. *)
 
-val set : t -> int -> char -> unit
 val set_int8 : t -> int -> int -> unit
+(** [set_int8 t i v] sets [t]'s signed 8-bit integer starting at byte index [i]
+    to [v]. *)
+
 val set_uint8 : t -> int -> int -> unit
+(** [set_uint8 t i v] sets [t]'s unsigned 8-bit integer starting at byte index
+    [i] to [v]. *)
+
 val set_uint16_ne : t -> int -> int -> unit
+(** [set_uint16_ne t i v] sets [t]'s native-endian unsigned 16-bit integer
+    starting at byte index [i] to [v]. *)
+
 val set_uint16_le : t -> int -> int -> unit
+(** [set_uint16_le t i v] sets [t]'s little-endian unsigned 16-bit integer
+    starting at byte index [i] to [v]. *)
+
 val set_uint16_be : t -> int -> int -> unit
+(** [set_uint16_le t i v] sets [t]'s big-endian unsigned 16-bit integer starting
+    at byte index [i] to [v]. *)
+
 val set_int16_ne : t -> int -> int -> unit
+(** [set_uint16_ne t i v] sets [t]'s native-endian signed 16-bit integer
+    starting at byte index [i] to [v]. *)
+
 val set_int16_le : t -> int -> int -> unit
+(** [set_uint16_le t i v] sets [t]'s little-endian signed 16-bit integer
+    starting at byte index [i] to [v]. *)
+
 val set_int16_be : t -> int -> int -> unit
+(** [set_uint16_le t i v] sets [t]'s big-endian signed 16-bit integer starting
+    at byte index [i] to [v]. *)
+
 val set_int32_ne : t -> int -> int32 -> unit
+(** [set_int32_ne t i v] sets [t]'s native-endian 32-bit integer starting at
+    byte index [i] to [v]. *)
+
 val set_int32_le : t -> int -> int32 -> unit
+(** [set_int32_ne t i v] sets [t]'s little-endian 32-bit integer starting at
+    byte index [i] to [v]. *)
+
 val set_int32_be : t -> int -> int32 -> unit
+(** [set_int32_ne t i v] sets [t]'s big-endian 32-bit integer starting at byte
+    index [i] to [v]. *)
+
 val set_int64_ne : t -> int -> int64 -> unit
+(** [set_int32_ne t i v] sets [t]'s native-endian 64-bit integer starting at
+    byte index [i] to [v]. *)
+
 val set_int64_le : t -> int -> int64 -> unit
+(** [set_int32_ne t i v] sets [t]'s little-endian 64-bit integer starting at
+    byte index [i] to [v]. *)
+
 val set_int64_be : t -> int -> int64 -> unit
-val unsafe_set : t -> int -> char -> unit
+(** [set_int32_ne t i v] sets [t]'s big-endian 64-bit integer starting at byte
+    index [i] to [v]. *)
 
 val sub : t -> off:int -> len:int -> t
 (** [sub bstr ~off ~len] does not allocate a bigstring, but instead returns a
     new view into [bstr] starting at [off], and with length [len].
 
     {b Note} that this does not allocate a new buffer, but instead shares the
-    buffer of [bstr] with the newly-returned bigstring. *)
+    buffer of [bstr] with the newly-returned bigstring.
+
+    {b Note} [sub] is more expensive than a [Slice.sub] (about 8 times slower).
+    If you want to focus on performance while avoiding copying, it's best to use
+    a [Slice]. *)
+
+val shift : t -> int -> t
+(** [shift bstr n] is [sub bstr n (length bstr - n)] (see {!val:sub} for more
+    details). *)
 
 val overlap : t -> t -> (int * int * int) option
+(** [overlap x y] returns the size (in bytes) of what is physically common
+    between [x] and [y], as well as the position of [y] in [x] and the position
+    of [x] in [y]. *)
 
 val sub_string : t -> off:int -> len:int -> string
 (** [sub_string bstr ~off ~len] returns a string of length [len] containing the
@@ -205,21 +375,16 @@ val to_string : t -> string
 (** [to_string bstr] is equivalent to
     [sub_string bstr ~off:0 ~len:(length bstr)]. *)
 
-val blit_to_bytes : t -> src_off:int -> bytes -> dst_off:int -> len:int -> unit
-(** [blit_to_bytes src ~src_off dst ~dst_off ~len] copies [len] bytes from
-    [src], starting at index [src_off], to byte sequence [dst], starting at
-    index [dst_off].
-
-    @raise Invalid_argument
-      if [src_off] and [len] do not designate a valid range of [src], or if
-      [dst_off] and [len] do not designate a valid range of [dst]. *)
-
 val is_empty : t -> bool
 (** [is_empty bstr] is [length bstr = 0]. *)
 
 val is_prefix : affix:string -> t -> bool
 (** [is_prefix ~affix bstr] is [true] iff [affix.[idx] = bstr.{idx}] for all
     indices [idx] of [affix]. *)
+
+val starts_with : prefix:t -> t -> bool
+(** [starts_with ~prefix t] is like {!val:is_prefix} but the prefix is a
+    {!type:t} (instead of a [string]). *)
 
 val is_infix : affix:string -> t -> bool
 (** [is_infix ~affix bstr] is [true] iff there exists an index [j] in [bstr]
@@ -230,6 +395,10 @@ val is_suffix : affix:string -> t -> bool
 (** [is_suffix ~affix bstr] is [true] iff [affix.[n - idx] = bstr.{m - idx}] for
     all indices [idx] of [affix] with [n = String.length affix - 1] and
     [m = length bstr - 1]. *)
+
+val ends_with : suffix:t -> t -> bool
+(** [ends_with ~suffix t] is like {!val:is_suffix} but the suffix is a {!type:t}
+    (instead of a [string]. *)
 
 val for_all : (char -> bool) -> t -> bool
 (** [for_all p bstr] is [true] iff for all indices [idx] of [bstr],
@@ -295,152 +464,7 @@ val drop : ?rev:bool -> ?min:int -> ?max:int -> ?sat:(char -> bool) -> t -> t
       (if rev then fst else snd) (span ~rev ~min ~max ~sat bstr)
     ]} *)
 
-val shift : t -> int -> t
-(** [shift bstr n] is [sub bstr n (length bstr - n)]. *)
-
 val split_on_char : char -> t -> t list
 val to_seq : t -> char Seq.t
 val to_seqi : t -> (int * char) Seq.t
 val of_seq : char Seq.t -> t
-
-module Pkt : sig
-  type bigstring = t
-  type 'a t
-
-  val char : char t
-  val uint8 : int t
-  val int8 : int t
-  val beuint16 : int t
-  val leuint16 : int t
-  val neuint16 : int t
-  val beint16 : int t
-  val leint16 : int t
-  val neint16 : int t
-  val beint32 : int32 t
-  val leint32 : int32 t
-  val neint32 : int32 t
-  val beint64 : int64 t
-  val leint64 : int64 t
-  val neint64 : int64 t
-  val varint31 : int t
-  val varint63 : int t
-  val bytes : int -> string t
-  val cstring : string t
-  val until : char -> string t
-
-  (* {2:records Records.}
-
-     {[
-       type header =
-         { version : int32
-         ; number : int32 }
-
-       let _PACK = 0x5041434bl
-
-       let header =
-         record (fun pack version number ->
-           if pack <> _PACK
-           then invalid_arg "Invalid PACK file";
-           { version; number })
-         |+ field beint32 (fun _ -> _PACK)
-         |+ field beint32 (fun t -> t.version)
-         |+ field beint32 (fun t -> t.number)
-         |> sealr
-     ]} *)
-
-  type ('a, 'b, 'c) open_record
-  (** The type for representing open records of type ['a] with a constructor of
-      ['b]. ['c] represents the remaining fields to be described using the
-      {!val:(|+)} operator. An open record initially stisfies ['c = 'b] and can
-      be {{!val:sealr} sealed} once ['c = 'a]. *)
-
-  val record : 'b -> ('a, 'b, 'b) open_record
-  (** [record f] is an incomplete representation of the record of type ['a] with
-      constructor [f]. To complete the representation, add fields with
-      {!val:(|+)} and then seal the record with {!val:sealr}. *)
-
-  type ('a, 'b) field
-  (** The type for fields holding values of type ['b] and belonging to a record
-      of type ['a]. *)
-
-  val field : 'a t -> ('b -> 'a) -> ('b, 'a) field
-  (** [field n t g] is the representation of the field called [n] of type [t]
-      with getter [g]. For instance:
-
-      {[
-        type t = { foo: string }
-
-        let foo = field cstring (fun t -> t.foo)
-      ]} *)
-
-  val ( |+ ) :
-    ('a, 'b, 'c -> 'd) open_record -> ('a, 'c) field -> ('a, 'b, 'd) open_record
-  (** [r |+ f] is the open record [r] augmented with the field [f]. *)
-
-  val sealr : ('a, 'b, 'a) open_record -> 'a t
-  (** [sealr r] seals the open record [r]. *)
-
-  (** {2:variants Variants.}
-
-      {[
-        type t = Foo | Bar of string
-
-        let t =
-          variant (fun foo bar -> function Foo -> foo | Bar s -> bar s)
-          |~ case0 Foo
-          |~ case1 cstring (fun x -> Bar x)
-          |> sealv
-      ]} *)
-
-  type ('a, 'b, 'c) open_variant
-  (** The type for representing open variants of type ['a] with pattern-matching
-      of type ['b]. ['c] represents the remaining constructors to be described
-      using the {!val:(|~)} operator. An open variant initially satisfies
-      ['c = 'b] and can be {{!val:sealv} sealed} once ['c = 'a]. *)
-
-  val variant : 'b -> ('a, 'b, 'b) open_variant
-  (** [variant n p] is an incomplete representation of the variant type called
-      [n] of type ['a] using [p] to deconstruct values. To complete the
-      representation, add cases with {!val:(|~)} and then seal the variant with
-      {!val:sealv}. *)
-
-  type ('a, 'b) case
-  (** The type for representing variant cases of type ['a] with patterns of type
-      ['b]. *)
-
-  type 'a case_p
-  (** The type for representing patterns for a variant of type ['a]. *)
-
-  val case0 : 'a -> ('a, 'a case_p) case
-  (** [case0 v] is a representation of a variant constructor [v] with no
-      arguments. For instance:
-
-      {[
-        type t = Foo
-
-        let foo = case0 Foo
-      ]} *)
-
-  val case1 : 'b t -> ('b -> 'a) -> ('a, 'b -> 'a case_p) case
-  (** [case1 n t c] is a representation of a variant constructor [c] with an
-      argument of type [t]. For instances:
-
-      {[
-        type t = Foo of string
-
-        let foo = case1 cstring (fun s -> Foo s)
-      ]} *)
-
-  val ( |~ ) :
-       ('a, 'b, 'c -> 'd) open_variant
-    -> ('a, 'c) case
-    -> ('a, 'b, 'd) open_variant
-  (** [v |~ c] is the open variant [v] augmented with the case [c]. *)
-
-  val sealv : ('a, 'b, 'a -> 'a case_p) open_variant -> 'a t
-  (** [sealv v] seals the open variant [v]. *)
-
-  (* {2:decoder Decoder.} *)
-
-  val decode : 'a t -> bigstring -> int ref -> 'a
-end
