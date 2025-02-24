@@ -14,5 +14,6 @@ run-test: [ "dune" "runtest" "-p" name "-j" jobs ]
 depends: [
   "ocaml"       {>= "4.14.0"}
   "dune"        {>= "3.5.0"}
+  "slice"       {= version}
 ]
 x-maintenance-intent: [ "(latest)" ]

@@ -1,0 +1,8 @@
+{1 OCaml and byte sequence.}
+
+OCaml has 3 types that correspond to byte sequences. The user is often confused
+about which type to choose, depending on the application they want to develop
+in OCaml. This short tutorial aims to be exhaustive about the advantages and
+disadvantages of these 3 types.
+
+{2 Bytes & String.}

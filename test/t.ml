@@ -715,8 +715,6 @@ let test60 =
 let is_white = function ' ' | '\t' -> true | _ -> false
 let is_letter = function 'a' .. 'z' | 'A' .. 'Z' -> true | _ -> false
 
-[@@@warning "-26"]
-
 let test61 =
   let descr = {text|span|text} in
   Test.test ~title:"span" ~descr @@ fun () ->
@@ -728,12 +726,16 @@ let test61 =
     check (Bstr.equal cl rl);
     check (Bstr.equal cr rr);
     check (Bstr.equal (if rev then cr else cl) t);
-    check (Bstr.equal (if rev then cl else cr) d) in
+    check (Bstr.equal (if rev then cl else cr) d)
+  in
   let invalid ?rev ?min ?max ?sat bstr =
-    try let _ = Bstr.span ?rev ?min ?max ?sat bstr in
-        check false
-    with Invalid_argument _ -> check true
-       | _exn -> check false in
+    try
+      let _ = Bstr.span ?rev ?min ?max ?sat bstr in
+      check false
+    with
+    | Invalid_argument _ -> check true
+    | _exn -> check false
+  in
   let base = Bstr.of_string "0ab cd0" in
   let ab_cd = Bstr.sub ~off:1 ~len:5 base in
   let ab = Bstr.sub ~off:1 ~len:2 base in
@@ -754,7 +756,8 @@ let test61 =
   test ~rev:true ~sat:is_white ab_cd (ab_cd, Bstr.sub ab_cd ~off:5 ~len:0);
   test ~rev:true ~sat:is_letter ab_cd (ab_, cd);
   test ~rev:true ~max:1 ~sat:is_letter ab_cd (ab_c, d);
-  test ~rev:true ~max:0 ~sat:is_letter ab_cd (ab_cd, Bstr.sub ab_cd ~off:5 ~len:0);
+  test ~rev:true ~max:0 ~sat:is_letter ab_cd
+    (ab_cd, Bstr.sub ab_cd ~off:5 ~len:0);
   test ~sat:is_letter ab (ab, Bstr.sub ab ~off:2 ~len:0);
   test ~max:1 ~sat:is_letter ab (a, b);
   test ~rev:true ~max:1 ~sat:is_letter ab (a, b);
@@ -785,15 +788,97 @@ let test61 =
   test ~rev:true ~sat:is_white ab_cd (ab_cd, Bstr.sub ~off:5 ~len:0 ab_cd);
   test ~rev:false ~sat:is_letter ab_cd (ab, _cd);
   test ~rev:true ~sat:is_letter ab_cd (ab_, cd);
-  test ~rev:false ~sat:is_letter ~max:0 ab_cd (Bstr.sub ~off:0 ~len:0 ab_cd, ab_cd);
-  test ~rev:true ~sat:is_letter ~max:0 ab_cd (ab_cd, Bstr.sub ~off:5 ~len:0 ab_cd);
+  test ~rev:false ~sat:is_letter ~max:0 ab_cd
+    (Bstr.sub ~off:0 ~len:0 ab_cd, ab_cd);
+  test ~rev:true ~sat:is_letter ~max:0 ab_cd
+    (ab_cd, Bstr.sub ~off:5 ~len:0 ab_cd);
   test ~rev:false ~sat:is_letter ~max:1 ab_cd (a, b_cd);
   test ~rev:true ~sat:is_letter ~max:1 ab_cd (ab_c, d);
-  test ~rev:false ~sat:is_letter ~min:2 ~max:1 ab_cd (Bstr.sub ~off:0 ~len:0 ab_cd, ab_cd);
-  test ~rev:true ~sat:is_letter ~min:2 ~max:1 ab_cd (ab_cd, Bstr.sub ~off:5 ~len:0 ab_cd);
-  test ~rev:false ~sat:is_letter ~min:3 ab_cd (Bstr.sub ~off:0 ~len:0 ab_cd, ab_cd);
-  test ~rev:true ~sat:is_letter ~min:3 ab_cd (ab_cd, Bstr.sub ~off:5 ~len:0 ab_cd)
+  test ~rev:false ~sat:is_letter ~min:2 ~max:1 ab_cd
+    (Bstr.sub ~off:0 ~len:0 ab_cd, ab_cd);
+  test ~rev:true ~sat:is_letter ~min:2 ~max:1 ab_cd
+    (ab_cd, Bstr.sub ~off:5 ~len:0 ab_cd);
+  test ~rev:false ~sat:is_letter ~min:3 ab_cd
+    (Bstr.sub ~off:0 ~len:0 ab_cd, ab_cd);
+  test ~rev:true ~sat:is_letter ~min:3 ab_cd
+    (ab_cd, Bstr.sub ~off:5 ~len:0 ab_cd)
 
+let test62 =
+  let descr = {text|cut|text} in
+  Test.test ~title:"cut" ~descr @@ fun () ->
+  let test a b =
+    match (a, b) with
+    | None, None -> check true
+    | Some (a, b), Some (u, v) ->
+        check (Bstr.equal a u);
+        check (Bstr.equal b v)
+    | _ -> check false
+  in
+  test (Bstr.cut ~sep:"," Bstr.empty) None;
+  test (Bstr.cut ~sep:"," (Bstr.string ",")) Bstr.(Some (string "", string ""));
+  test
+    (Bstr.cut ~sep:"," (Bstr.string ",,"))
+    Bstr.(Some (string "", string ","));
+  test
+    (Bstr.cut ~sep:"," (Bstr.string ",,,"))
+    Bstr.(Some (string "", string ",,"));
+  test (Bstr.cut ~sep:"," (Bstr.string "123")) None;
+  test
+    (Bstr.cut ~sep:"," (Bstr.string ",123"))
+    Bstr.(Some (string "", string "123"));
+  test
+    (Bstr.cut ~sep:"," (Bstr.string "123,"))
+    Bstr.(Some (string "123", string ""));
+  test
+    (Bstr.cut ~sep:"," (Bstr.string "1,2,3"))
+    Bstr.(Some (string "1", string "2,3"));
+  test
+    (Bstr.cut ~sep:"," (Bstr.string " 1,2,3"))
+    Bstr.(Some (string " 1", string "2,3"));
+  test (Bstr.cut ~sep:"<>" Bstr.empty) None;
+  test
+    (Bstr.cut ~sep:"<>" (Bstr.string "<>"))
+    Bstr.(Some (string "", string ""));
+  test
+    (Bstr.cut ~sep:"<>" (Bstr.string "<><>"))
+    Bstr.(Some (string "", string "<>"));
+  test
+    (Bstr.cut ~sep:"<>" (Bstr.string "<><><>"))
+    Bstr.(Some (string "", string "<><>"));
+  test (Bstr.cut ~rev:true ~sep:"<>" (Bstr.string "1")) None;
+  test (Bstr.cut ~sep:"<>" (Bstr.string "123")) None;
+  test
+    (Bstr.cut ~sep:"<>" (Bstr.string "<>123"))
+    Bstr.(Some (string "", string "123"));
+  test
+    (Bstr.cut ~sep:"<>" (Bstr.string "123<>"))
+    Bstr.(Some (string "123", string ""));
+  test
+    (Bstr.cut ~sep:"<>" (Bstr.string "1<>2<>3"))
+    Bstr.(Some (string "1", string "2<>3"));
+  test
+    (Bstr.cut ~sep:"<>" (Bstr.string ">>><>>>><>>>><>>>>"))
+    Bstr.(Some (string ">>>", string ">>><>>>><>>>>"));
+  test
+    (Bstr.cut ~sep:"<->" (Bstr.string "<->>->"))
+    Bstr.(Some (string "", string ">->"));
+  test (Bstr.cut ~rev:true ~sep:"<->" (Bstr.string "<-")) None;
+  test
+    (Bstr.cut ~sep:"aa" (Bstr.string "aa"))
+    Bstr.(Some (string "", string ""));
+  test
+    (Bstr.cut ~sep:"aa" (Bstr.string "aaa"))
+    Bstr.(Some (string "", string "a"));
+  test
+    (Bstr.cut ~sep:"aa" (Bstr.string "aaaa"))
+    Bstr.(Some (string "", string "aa"));
+  test
+    (Bstr.cut ~sep:"aa" (Bstr.string "aaaaa"))
+    Bstr.(Some (string "", string "aaa"));
+  test
+    (Bstr.cut ~sep:"aa" (Bstr.string "aaaaaa"))
+    Bstr.(Some (string "", string "aaaa"));
+  test (Bstr.cut ~sep:"ab" (Bstr.string "faaaa")) None
 
 let ( / ) = Filename.concat
 
@@ -806,7 +891,7 @@ let () =
     ; test28; test29; test30; test31; test32; test33; test34; test35; test36
     ; test37; test38; test39; test40; test41; test42; test43; test44; test45
     ; test46; test47; test48; test49; test50; test51; test52; test53; test54
-    ; test55; test56; test57; test58; test59; test60; test61
+    ; test55; test56; test57; test58; test59; test60; test61; test62
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in

@@ -1,5 +1,48 @@
 type t = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 
+external length : t -> int = "%caml_ba_dim_1"
+
+external ptr : t -> (nativeint[@unboxed])
+  = "bstr_bytecode_ptr" "bstr_native_ptr"
+[@@noalloc]
+
+let overlap a b =
+  let src_a = ptr a in
+  let src_b = ptr b in
+  let len_a = Nativeint.of_int (length a) in
+  let len_b = Nativeint.of_int (length b) in
+  let len =
+    let ( + ) = Nativeint.add in
+    let ( - ) = Nativeint.sub in
+    Nativeint.max 0n (Nativeint.min (src_a + len_a) (src_b + len_b))
+    - Nativeint.max src_a src_b
+  in
+  let len = Nativeint.to_int len in
+  if src_a >= src_b && src_a < Nativeint.add src_b len_b then
+    let offset = Nativeint.(to_int (sub src_a src_b)) in
+    Some (len, 0, offset)
+  else if src_b >= src_a && src_b < Nativeint.add src_a len_a then
+    let offset = Nativeint.(to_int (sub src_b src_a)) in
+    Some (len, offset, 0)
+  else None
+
+external ( < ) : 'a -> 'a -> bool = "%lessthan"
+
+let ( < ) (x : int) y = x < y [@@inline]
+
+external ( <= ) : 'a -> 'a -> bool = "%lessequal"
+
+let ( <= ) (x : int) y = x <= y [@@inline]
+
+external ( > ) : 'a -> 'a -> bool = "%greaterthan"
+
+let ( > ) (x : int) y = x > y [@@inline]
+
+external ( >= ) : 'a -> 'a -> bool = "%greaterequal"
+
+let ( >= ) (x : int) y = x >= y [@@inline]
+let min (a : int) b = if a <= b then a else b [@@inline]
+
 module Bytes = struct
   include Bytes
 
@@ -118,7 +161,6 @@ let memset src ~off ~len value =
 let empty = Bigarray.Array1.create Bigarray.char Bigarray.c_layout 0
 let create len = Bigarray.Array1.create Bigarray.char Bigarray.c_layout len
 
-external length : t -> int = "%caml_ba_dim_1"
 external get : t -> int -> char = "%caml_ba_ref_1"
 external unsafe_get : t -> int -> char = "%caml_ba_unsafe_ref_1"
 external set : t -> int -> char -> unit = "%caml_ba_set_1"
@@ -140,7 +182,8 @@ let unsafe_fill bstr ~off ~len v =
     unsafe_set_uint8 bstr (off + i) v
   done
 
-let fill bstr ~off ~len chr =
+let fill bstr ?(off = 0) ?len chr =
+  let len = match len with Some len -> len | None -> length bstr - off in
   if len < 0 || off < 0 || off > length bstr - len then invalid_arg "Bstr.fill";
   unsafe_fill bstr ~off ~len (Char.code chr)
 
@@ -481,7 +524,7 @@ let with_range ?(first = 0) ?(len = max_int) bstr =
     in
     let first = if first < 0 then 0 else first in
     if first = 0 && last = max_idx then bstr
-    else sub bstr ~off:first ~len:(last + 1 - first)
+    else unsafe_sub bstr first (last + 1 - first)
 
 let with_index_range ?(first = 0) ?last bstr =
   let bstr_len = length bstr in
@@ -494,7 +537,7 @@ let with_index_range ?(first = 0) ?last bstr =
   let first = if first < 0 then 0 else first in
   if first > max_idx || last < 0 || first > last then empty
   else if first == 0 && last = max_idx then bstr
-  else sub bstr ~off:first ~len:(last + 1 - first)
+  else unsafe_sub bstr first (last + 1 - first)
 
 let is_white chr = chr == ' ' || chr == '\t'
 
@@ -518,7 +561,7 @@ let trim ?(drop = is_white) bstr =
     else
       let right = right_pos max_idx in
       if left == 0 && right == len then bstr
-      else sub bstr ~off:left ~len:(right - left)
+      else unsafe_sub bstr left (right - left)
 
 let fspan ?(min = 0) ?(max = max_int) ?(sat = Fun.const true) bstr =
   if min < 0 then invalid_arg "Bstr.fspan";
@@ -536,7 +579,10 @@ let fspan ?(min = 0) ?(max = max_int) ?(sat = Fun.const true) bstr =
       if idx <= max_idx && sat bstr.{idx} then go (succ idx)
       else if idx < need_idx || idx == 0 then (empty, bstr)
       else if idx == len then (bstr, empty)
-      else (sub bstr ~off:0 ~len:idx, sub bstr ~off:idx ~len:(len - idx))
+      else
+        let a = unsafe_sub bstr 0 idx in
+        let b = unsafe_sub bstr idx (len - idx) in
+        (a, b)
     in
     go 0
 
@@ -553,12 +599,14 @@ let rspan ?(min = 0) ?(max = max_int) ?(sat = Fun.const true) bstr =
     in
     let need_idx = len - min - 1 in
     let rec go idx =
-      if idx >= min_idx && sat bstr.{idx} then go (pred idx)
+      if idx >= min_idx && sat (unsafe_get bstr idx) then go (idx - 1)
       else if idx > need_idx || idx == max_idx then (bstr, empty)
       else if idx < 0 then (empty, bstr)
       else
         let cut = idx + 1 in
-        (sub bstr ~off:0 ~len:cut, sub bstr ~off:cut ~len:(len - cut))
+        let a = unsafe_sub bstr 0 cut in
+        let b = unsafe_sub bstr cut (len - cut) in
+        (a, b)
     in
     go max_idx
 
@@ -575,34 +623,55 @@ let drop ?(rev = false) ?min ?max ?sat bstr =
   let a, b = span ~rev ?min ?max ?sat bstr in
   if rev then a else b
 
+let fcut ~sep bstr =
+  let sep_len = String.length sep in
+  let len = length bstr in
+  if sep_len == 0 then invalid_arg "cut: empty separator";
+  let max_sep_zidx = sep_len - 1 in
+  let max_s_zidx = len - sep_len in
+  let rec check_sep i k =
+    if k > max_sep_zidx then
+      let a = unsafe_sub bstr 0 i in
+      let b = unsafe_sub bstr (i + sep_len) (len - i - sep_len) in
+      Some (a, b)
+    else if unsafe_get bstr (i + k) == String.unsafe_get sep k then
+      check_sep i (k + 1)
+    else scan (i + 1)
+  and scan i =
+    if i > max_s_zidx then None
+    else if unsafe_get bstr i == String.unsafe_get sep 0 then check_sep i 1
+    else scan (i + 1)
+  in
+  scan 0
+
+let rcut ~sep bstr =
+  let sep_len = String.length sep in
+  let len = length bstr in
+  if sep_len == 0 then invalid_arg "cut: empty separator";
+  let max_sep_zidx = sep_len - 1 in
+  let max_s_zidx = len - 1 in
+  let rec check_sep i k =
+    if k > max_sep_zidx then
+      let a = sub ~off:0 ~len:i bstr in
+      let b = sub ~off:(i + sep_len) ~len:(len - i - sep_len) bstr in
+      Some (a, b)
+    else if unsafe_get bstr (i + k) == String.unsafe_get sep k then
+      check_sep i (k + 1)
+    else rscan (i - 1)
+  and rscan i =
+    if i < 0 then None
+    else if unsafe_get bstr i == String.unsafe_get sep 0 then check_sep i 1
+    else rscan (i - 1)
+  in
+  rscan (max_s_zidx - max_sep_zidx)
+
+let cut ?(rev = false) ~sep bstr =
+  match rev with true -> rcut ~sep bstr | false -> fcut ~sep bstr
+
 let shift bstr off =
   if off > length bstr then invalid_arg "Bstr.shift";
   let len = length bstr - off in
   Bigarray.Array1.sub bstr off len
-
-external ptr : t -> (nativeint[@unboxed])
-  = "bstr_bytecode_ptr" "bstr_native_ptr"
-[@@noalloc]
-
-let overlap a b =
-  let src_a = ptr a in
-  let src_b = ptr b in
-  let len_a = Nativeint.of_int (length a) in
-  let len_b = Nativeint.of_int (length b) in
-  let len =
-    let ( + ) = Nativeint.add in
-    let ( - ) = Nativeint.sub in
-    Nativeint.max 0n (Nativeint.min (src_a + len_a) (src_b + len_b))
-    - Nativeint.max src_a src_b
-  in
-  let len = Nativeint.to_int len in
-  if src_a >= src_b && src_a < Nativeint.add src_b len_b then
-    let offset = Nativeint.(to_int (sub src_a src_b)) in
-    Some (len, 0, offset)
-  else if src_b >= src_a && src_b < Nativeint.add src_a len_a then
-    let offset = Nativeint.(to_int (sub src_b src_a)) in
-    Some (len, offset, 0)
-  else None
 
 let split_on_char sep bstr =
   let lst = ref [] in
@@ -637,7 +706,7 @@ let of_seq seq =
   let n = ref 0 in
   let buf = ref (make 0x7ff '\000') in
   let resize () =
-    let new_len = Int.min (2 * length !buf) Sys.max_string_length in
+    let new_len = min (2 * length !buf) Sys.max_string_length in
     (* TODO(dinosaure): should we keep this limit? *)
     if length !buf == new_len then failwith "Bstr.of_seq: cannot grow bigstring";
     let new_buf = make new_len '\000' in

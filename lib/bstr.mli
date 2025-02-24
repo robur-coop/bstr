@@ -63,27 +63,27 @@
 
     This can be useful for decoding packets, extracting information such as
     integers, without copying parts or all of the bigstring. For example, for a
-    TCP/IP packet, we'd like to decode certain information but also give a
-    slice of the bigstring that corresponds to the packet's payload (so that we
-    can process this payload without having to copy).
+    TCP/IP packet, we'd like to decode certain information but also give a slice
+    of the bigstring that corresponds to the packet's payload (so that we can
+    process this payload without having to copy).
 
-    Finally, it may be interesting in an encoder of some kind to give
-    bigstrings that the user can write to, and check that these bigstrings are
-    part of a larger bigstring (in other words, these bigstrings come from a
-    {!val:sub} of a larger bigstring) that has been allocated beforehand.
+    Finally, it may be interesting in an encoder of some kind to give bigstrings
+    that the user can write to, and check that these bigstrings are part of a
+    larger bigstring (in other words, these bigstrings come from a {!val:sub} of
+    a larger bigstring) that has been allocated beforehand.
 
     Bigstrings therefore have certain advantages over bytes, but also some
     disadvantages. Considering the former as elements you should use
-    systematically is not a good choice. However, we are sometimes forced to
-    use them (especially when communicating with embedded devices) and they can
-    be interesting for certain types of applications. This overview presents a
-    few cases, but examples exist in the OCaml community where the use of
-    bigstrings is justified.
+    systematically is not a good choice. However, we are sometimes forced to use
+    them (especially when communicating with embedded devices) and they can be
+    interesting for certain types of applications. This overview presents a few
+    cases, but examples exist in the OCaml community where the use of bigstrings
+    is justified.
 
     In short, this library attempts to summarize everything that can be done
     with bigstrings.
 
-    {2: Performance.}
+    {2 Performance.}
 
     {1:pkt Encode & Decode packets.}
 
@@ -96,14 +96,25 @@ type t = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 val memcpy : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
 (** [memcpy src ~src_off dst ~dst_off ~len] copies [len] bytes from [src] to
     [dst]. [src] {b must not} overlap [dst]. Use {!val:memmove} if [src] & [dst]
-    do overlap. *)
+    do overlap.
+
+    You can check whether two buffers overlap using {!val:overlap}. If this
+    returns [None], the two values do not refer to a common memory area — and it
+    is safe to use memcpy.
+
+    @raise Invalid_argument
+      if [src_off] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
 
 val memmove : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
 (** [memmove src ~src_off dst ~dst_off ~len] copies [len] bytes from [src] to
     [dst]. [src] and [dst] may overlap: copying takes place as though the bytes
     in [src] are first copied into a temporary array that does not overlap [src]
     or [dst], and the bytes are then copied from the temporary array to [dst].
-*)
+
+    @raise Invalid_argument
+      if [src_off] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
 
 val memcmp : t -> src_off:int -> t -> dst_off:int -> len:int -> int
 val memchr : t -> off:int -> len:int -> char -> int
@@ -155,7 +166,7 @@ val string : ?off:int -> ?len:int -> string -> t
     [String.length str]). [str] is fully-replaced by a fresh allocated
     {!type:t}. *)
 
-val fill : t -> off:int -> len:int -> char -> unit
+val fill : t -> ?off:int -> ?len:int -> char -> unit
 (** [fill t off len chr] modifies [t] in place, replacing [len] characters with
     [chr], starting at [off].
 
@@ -179,7 +190,7 @@ val blit : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
     the same byte sequence, and the source and destination intervals overlap.
 
     @raise Invalid_argument
-      if [src_pos] and [len] do not designate a valid range of [src], or if
+      if [src_off] and [len] do not designate a valid range of [src], or if
       [dst_off] and [len] do not designate a valid range of [dst]. *)
 
 val blit_from_string :
@@ -187,7 +198,7 @@ val blit_from_string :
 (** Just like {!val:blit}, but with a string as source one.
 
     {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
-    is used to make the copy.
+    is used to do the copy.
 
     @raise Invalid_argument
       if [src_pos] and [len] do not designate a valid range of [src], or if
@@ -198,7 +209,7 @@ val blit_from_bytes :
 (** Just like {!val:blit}, but with a bytes as source one.
 
     {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
-    is used to make the copy.
+    is used to do the copy.
 
     @raise Invalid_argument
       if [src_pos] and [len] do not designate a valid range of [src], or if
@@ -210,7 +221,7 @@ val blit_to_bytes : t -> src_off:int -> bytes -> dst_off:int -> len:int -> unit
     index [dst_off].
 
     {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
-    is used to make the copy.
+    is used to do the copy.
 
     @raise Invalid_argument
       if [src_off] and [len] do not designate a valid range of [src], or if
@@ -463,6 +474,33 @@ val drop : ?rev:bool -> ?min:int -> ?max:int -> ?sat:(char -> bool) -> t -> t
     {[
       (if rev then fst else snd) (span ~rev ~min ~max ~sat bstr)
     ]} *)
+
+val cut : ?rev:bool -> sep:string -> t -> (t * t) option
+(** [cut ~sep bstr] is either the pair [Some (l, r)] of the two (possibly empty)
+    sub-buffers of [bstr] that are delimited by the first match of the non empty
+    separator string [sep] or [None] if [sep] can't be matched in [bstr].
+    Matching starts from the beginning of [bstr] ([rev] is [false], default) or
+    the end ([rev] is [true]).
+
+    The invariant [l ^ sep ^ r = s] holds.
+
+    For instance, the {i ABNF} expression:
+
+    {v
+    field_name := *PRINT
+    field_value := *ASCII
+    field := field_name ":" field_value
+    v}
+
+    can be translated to:
+
+    {[
+      match Bstr.cut ~sep:":" value with
+      | Some (field_name, field_value) -> ...
+      | None -> invalid_arg "Invalid field"
+    ]}
+
+    @raise Invalid_argument if [sep] is the empty buffer. *)
 
 val split_on_char : char -> t -> t list
 val to_seq : t -> char Seq.t

@@ -7,3 +7,8 @@
  (name t)
  (modules t)
  (libraries bstr test))
+
+(test
+ (name b)
+ (modules b)
+ (libraries bin bstr test))
