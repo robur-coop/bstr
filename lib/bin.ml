@@ -17,8 +17,12 @@ module Witness = struct
     end in
     (module Inst)
 
-  let _eq : type a b. a t -> b t -> (a, b) eq option =
+  let eq : type a b. a t -> b t -> (a, b) eq option =
    fun (module A) (module B) -> match A.Eq with B.Eq -> Some Refl | _ -> None
+
+  let cast_exn : type a b. a t -> b t -> a -> b =
+   fun awit bwit a ->
+    match eq awit bwit with Some Refl -> a | None -> assert false
 end
 
 type endianness = Big_endian | Little_endian | Native_endian
@@ -250,7 +254,39 @@ module Size = struct
    fun { x; g; _ } -> Sizer.using g (size_of x)
 end
 
-(* decoder *)
+module Dispatch = struct
+  type 'a t =
+    | Base : 'a -> 'a t
+    | Arrow : { arg_wit: 'b Witness.t; fn: 'b -> 'a } -> 'a t
+end
+
+module Case_folder = struct
+  type ('a, 'r) t = { c0: 'a case0 -> 'r; c1: 'b. ('a, 'b) case1 -> 'b -> 'r }
+end
+
+let fold_variant : type a r. (a, r) Case_folder.t -> a variant -> a -> r =
+ fun folder v_typ ->
+  let cases =
+    let fn = function
+      | C0 c0 -> Dispatch.Base (folder.c0 c0)
+      | C1 c1 -> Dispatch.Arrow { arg_wit= c1.cwitn1; fn= folder.c1 c1 }
+    in
+    Array.map fn v_typ.vcases
+  in
+  fun v ->
+    match v_typ.vget v with
+    | CV0 { ctag0; _ } -> begin
+        match cases.(ctag0) with Dispatch.Base x -> x | _ -> assert false
+      end
+    | CV1 ({ ctag1; cwitn1; _ }, v) -> begin
+        match cases.(ctag1) with
+        | Dispatch.Arrow { fn; arg_wit } ->
+            let v = Witness.cast_exn cwitn1 arg_wit v in
+            fn v
+        | _ -> assert false
+      end
+
+(* decoder & encoder for [bstr] *)
 
 module Bstr = struct
   module Record_decoder = Fields_folder (struct
@@ -490,7 +526,9 @@ module Bstr = struct
 
   let rec encode : type a. a t -> a encoder = function
     | Primary p -> prim p
-    | _ -> assert false
+    | Map m -> map m
+    | Record r -> record r
+    | Variant v -> variant v
 
   and prim : type a. a primary -> a encoder = function
     | Char -> encode_char
@@ -505,6 +543,156 @@ module Bstr = struct
     | Var_int63 -> encode_varint
     | CString -> encode_cstring
     | Until _ -> encode_until
+
+  and record : type a. a record -> a encoder =
+   fun r ->
+    let fields_encoders : (a -> Bstr.t -> int ref -> unit) list =
+      let fn (Field f) = fun v buf off -> (encode f.ftype) (f.fget v) buf off in
+      List.map fn (fields r)
+    in
+    fun v buf off -> List.iter (fun fn -> fn v buf off) fields_encoders
+
+  and variant : type a. a variant -> a encoder =
+    let c0 { ctag0; _ } = encode_varint ctag0 in
+    let c1 c =
+      let arg = encode c.ctype1 in
+      fun v buf off ->
+        encode_varint c.ctag1 buf off;
+        arg v buf off
+    in
+    fun v -> fold_variant { c0; c1 } v
+
+  and map : type a b. (a, b) map -> b encoder =
+   fun { x; g; _ } -> fun u buf off -> encode x (g u) buf off
+end
+
+module Bytes = struct
+  type 'a encoder = 'a -> bytes -> int ref -> unit
+
+  let encode_char chr buf off =
+    let pos = !off in
+    incr off; Bytes.set buf pos chr
+  [@@inline always]
+
+  let encode_uint8 byte buf off =
+    let pos = !off in
+    incr off;
+    Bytes.set_uint8 buf pos byte
+  [@@inline always]
+
+  let encode_int8 byte buf off =
+    let pos = !off in
+    incr off;
+    Bytes.set_int8 buf pos byte
+  [@@inline always]
+
+  let encode_uint16 endian value buf off =
+    let pos = !off in
+    off := !off + 2;
+    match endian with
+    | Big_endian -> Bytes.set_uint16_be buf pos value
+    | Little_endian -> Bytes.set_uint16_le buf pos value
+    | Native_endian -> Bytes.set_uint16_ne buf pos value
+  [@@inline always]
+
+  let encode_int16 endian value buf off =
+    let pos = !off in
+    off := !off + 2;
+    match endian with
+    | Big_endian -> Bytes.set_int16_be buf pos value
+    | Little_endian -> Bytes.set_int16_le buf pos value
+    | Native_endian -> Bytes.set_int16_ne buf pos value
+  [@@inline always]
+
+  let encode_int32 endian value buf off =
+    let pos = !off in
+    off := !off + 4;
+    match endian with
+    | Big_endian -> Bytes.set_int32_be buf pos value
+    | Little_endian -> Bytes.set_int32_be buf pos value
+    | Native_endian -> Bytes.set_int32_be buf pos value
+
+  let encode_int64 endian value buf off =
+    let pos = !off in
+    off := !off + 8;
+    match endian with
+    | Big_endian -> Bytes.set_int64_be buf pos value
+    | Little_endian -> Bytes.set_int64_be buf pos value
+    | Native_endian -> Bytes.set_int64_be buf pos value
+
+  let encode_bytes len src buf off =
+    let pos = !off in
+    off := !off + len;
+    Bytes.blit_string src 0 buf pos len
+
+  let encode_varint value buf off =
+    let num = ref (value lsr 7) in
+    let cmd = ref (value land 0x7f) in
+    cmd := if !num != 0 then !cmd lor 0x80 else !cmd;
+    Bytes.set_uint8 buf !off !cmd;
+    incr off;
+    while !num != 0 do
+      cmd := !num land 0x7f;
+      num := !num lsr 7;
+      cmd := if !num != 0 then !cmd lor 0x80 else !cmd;
+      Bytes.set_uint8 buf !off !cmd;
+      incr off
+    done
+
+  let encode_cstring src buf off =
+    let pos = !off in
+    let len = String.length src in
+    off := !off + len;
+    Bytes.blit_string src 0 buf pos len;
+    Bytes.set_uint8 buf !off 0;
+    incr off
+
+  let encode_until src buf off =
+    let pos = !off in
+    let len = String.length src in
+    off := !off + len;
+    Bytes.blit_string src 0 buf pos len
+
+  let rec encode : type a. a t -> a encoder = function
+    | Primary p -> prim p
+    | Map m -> map m
+    | Record r -> record r
+    | Variant v -> variant v
+
+  and prim : type a. a primary -> a encoder = function
+    | Char -> encode_char
+    | UInt8 -> encode_uint8
+    | Int8 -> encode_int8
+    | UInt16 e -> encode_uint16 e
+    | Int16 e -> encode_int16 e
+    | Int32 e -> encode_int32 e
+    | Int64 e -> encode_int64 e
+    | Bytes len -> encode_bytes len
+    | Var_int31 -> encode_varint
+    | Var_int63 -> encode_varint
+    | CString -> encode_cstring
+    | Until _ -> encode_until
+
+  and record : type a. a record -> a encoder =
+   fun r ->
+    let fields_encoders : (a -> bytes -> int ref -> unit) list =
+      let fn (Field f) = fun v buf off -> (encode f.ftype) (f.fget v) buf off in
+      List.map fn (fields r)
+    in
+    fun v buf off -> List.iter (fun fn -> fn v buf off) fields_encoders
+
+  and variant : type a. a variant -> a encoder =
+    let c0 { ctag0; _ } = encode_varint ctag0 in
+    let c1 c =
+      let arg = encode c.ctype1 in
+      fun v buf off ->
+        encode_varint c.ctag1 buf off;
+        arg v buf off
+    in
+    fun v -> fold_variant { c0; c1 } v
+
+  and map : type a b. (a, b) map -> b encoder =
+   fun { x; g; _ } -> fun u buf off -> encode x (g u) buf off
 end
 
 let decode_bstr = Bstr.decode
@@ -602,3 +790,11 @@ let size_of_bstr ?(off = 0) t bstr =
   | Size.Static len -> Some len
   | Size.Dynamic fn -> Some (fn bstr off)
   | Size.Unknown -> None
+
+let to_string t value =
+  match size_of_value t value with
+  | Some len ->
+      let buf = Stdlib.Bytes.create len in
+      Bytes.encode t value buf (ref 0);
+      Stdlib.Bytes.unsafe_to_string buf
+  | None -> assert false (* TODO(dinosaure): with [Buffer.t]. *)

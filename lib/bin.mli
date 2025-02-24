@@ -140,10 +140,10 @@ val sealv : ('a, 'b, 'a -> 'a case_p) open_variant -> 'a t
 (* {2:decoder Decoder.} *)
 
 val decode_bstr : 'a t -> Bstr.t -> int ref -> 'a
-(** [decode_bstr encoding] is the binary decoder for values of type [encoding].
-*)
+(** [decode_bstr enc] is the binary decoder for values of type [enc]. *)
 
 val encode_bstr : 'a t -> 'a -> Bstr.t -> int ref -> unit
+val to_string : 'a t -> 'a -> string
 
 module Size : sig
   type -'a size_of
