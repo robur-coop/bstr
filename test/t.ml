@@ -723,10 +723,13 @@ let test61 =
     let t = Bstr.take ?rev ?min ?max ?sat bstr in
     let d = Bstr.drop ?rev ?min ?max ?sat bstr in
     let rev = Option.value ~default:false rev in
-    check (Bstr.equal cl rl);
-    check (Bstr.equal cr rr);
-    check (Bstr.equal (if rev then cr else cl) t);
-    check (Bstr.equal (if rev then cl else cr) d)
+    let result =
+      Bstr.equal cl rl
+      && Bstr.equal cr rr
+      && Bstr.equal (if rev then cr else cl) t
+      && Bstr.equal (if rev then cl else cr) d
+    in
+    check result
   in
   let invalid ?rev ?min ?max ?sat bstr =
     try
@@ -809,76 +812,311 @@ let test62 =
   let test a b =
     match (a, b) with
     | None, None -> check true
-    | Some (a, b), Some (u, v) ->
-        check (Bstr.equal a u);
-        check (Bstr.equal b v)
+    | Some (a, b), Some (u, v) -> check (Bstr.equal a u && Bstr.equal b v)
     | _ -> check false
   in
-  test (Bstr.cut ~sep:"," Bstr.empty) None;
-  test (Bstr.cut ~sep:"," (Bstr.string ",")) Bstr.(Some (string "", string ""));
+  let open Bstr in
+  test (cut ~sep:"," empty) None;
+  test (cut ~sep:"," (string ",")) (Some (string "", string ""));
+  test (cut ~sep:"," (string ",,")) (Some (string "", string ","));
+  test (cut ~sep:"," (string ",,,")) (Some (string "", string ",,"));
+  test (cut ~sep:"," (string "123")) None;
+  test (cut ~sep:"," (string ",123")) (Some (string "", string "123"));
+  test (cut ~sep:"," (string "123,")) (Some (string "123", string ""));
+  test (cut ~sep:"," (string "1,2,3")) (Some (string "1", string "2,3"));
+  test (cut ~sep:"," (string " 1,2,3")) (Some (string " 1", string "2,3"));
+  test (cut ~sep:"<>" empty) None;
+  test (cut ~sep:"<>" (string "<>")) (Some (string "", string ""));
+  test (cut ~sep:"<>" (string "<><>")) (Some (string "", string "<>"));
+  test (cut ~sep:"<>" (string "<><><>")) (Some (string "", string "<><>"));
+  test (cut ~rev:true ~sep:"<>" (string "1")) None;
+  test (cut ~sep:"<>" (string "123")) None;
+  test (cut ~sep:"<>" (string "<>123")) (Some (string "", string "123"));
+  test (cut ~sep:"<>" (string "123<>")) (Some (string "123", string ""));
+  test (cut ~sep:"<>" (string "1<>2<>3")) (Some (string "1", string "2<>3"));
   test
-    (Bstr.cut ~sep:"," (Bstr.string ",,"))
-    Bstr.(Some (string "", string ","));
+    (cut ~sep:"<>" (string ">>><>>>><>>>><>>>>"))
+    (Some (string ">>>", string ">>><>>>><>>>>"));
+  test (cut ~sep:"<->" (string "<->>->")) (Some (string "", string ">->"));
+  test (cut ~rev:true ~sep:"<->" (string "<-")) None;
+  test (cut ~sep:"aa" (string "aa")) (Some (string "", string ""));
+  test (cut ~sep:"aa" (string "aaa")) (Some (string "", string "a"));
+  test (cut ~sep:"aa" (string "aaaa")) (Some (string "", string "aa"));
+  test (cut ~sep:"aa" (string "aaaaa")) (Some (string "", string "aaa"));
+  test (cut ~sep:"aa" (string "aaaaaa")) (Some (string "", string "aaaa"));
+  test (cut ~sep:"ab" (string "faaaa")) None
+
+let test63 =
+  let descr = {text|cut ~rev:true|text} in
+  Test.test ~title:"cut ~rev:true" ~descr @@ fun () ->
+  let test a b =
+    match (a, b) with
+    | None, None -> check true
+    | Some (a, b), Some (u, v) -> check (Bstr.equal a u && Bstr.equal b v)
+    | _ -> check false
+  in
+  let open Bstr in
+  let rev = true in
+  test (cut ~rev ~sep:"," (string "")) None;
+  test (cut ~rev ~sep:"," (string ",")) (Some (string "", string ""));
+  test (cut ~rev ~sep:"," (string ",,")) (Some (string ",", string ""));
+  test (cut ~rev ~sep:"," (string ",,,")) (Some (string ",,", string ""));
+  test (cut ~rev ~sep:"," (string "123")) None;
+  test (cut ~rev ~sep:"," (string ",123")) (Some (string "", string "123"));
+  test (cut ~rev ~sep:"," (string "123,")) (Some (string "123", string ""));
+  test (cut ~rev ~sep:"," (string "1,2,3")) (Some (string "1,2", string "3"));
+  test (cut ~rev ~sep:"," (string "1,2,3 ")) (Some (string "1,2", string "3 "));
+  test (cut ~rev ~sep:"<>" empty) None;
+  test (cut ~rev ~sep:"<>" (string "<>")) (Some (string "", string ""));
+  test (cut ~rev ~sep:"<>" (string "<><>")) (Some (string "<>", string ""));
+  test (cut ~rev ~sep:"<>" (string "<><><>")) (Some (string "<><>", string ""));
+  test (cut ~rev ~sep:"<>" (string "1")) None;
+  test (cut ~rev ~sep:"<>" (string "123")) None;
+  test (cut ~rev ~sep:"<>" (string "<>123")) (Some (string "", string "123"));
+  test (cut ~rev ~sep:"<>" (string "123<>")) (Some (string "123", string ""));
   test
-    (Bstr.cut ~sep:"," (Bstr.string ",,,"))
-    Bstr.(Some (string "", string ",,"));
-  test (Bstr.cut ~sep:"," (Bstr.string "123")) None;
+    (cut ~rev ~sep:"<>" (string "1<>2<>3"))
+    (Some (string "1<>2", string "3"));
   test
-    (Bstr.cut ~sep:"," (Bstr.string ",123"))
-    Bstr.(Some (string "", string "123"));
+    (cut ~rev ~sep:"<>" (string "1<>2<>3 "))
+    (Some (string "1<>2", string "3 "));
   test
-    (Bstr.cut ~sep:"," (Bstr.string "123,"))
-    Bstr.(Some (string "123", string ""));
-  test
-    (Bstr.cut ~sep:"," (Bstr.string "1,2,3"))
-    Bstr.(Some (string "1", string "2,3"));
-  test
-    (Bstr.cut ~sep:"," (Bstr.string " 1,2,3"))
-    Bstr.(Some (string " 1", string "2,3"));
-  test (Bstr.cut ~sep:"<>" Bstr.empty) None;
-  test
-    (Bstr.cut ~sep:"<>" (Bstr.string "<>"))
-    Bstr.(Some (string "", string ""));
-  test
-    (Bstr.cut ~sep:"<>" (Bstr.string "<><>"))
-    Bstr.(Some (string "", string "<>"));
-  test
-    (Bstr.cut ~sep:"<>" (Bstr.string "<><><>"))
-    Bstr.(Some (string "", string "<><>"));
-  test (Bstr.cut ~rev:true ~sep:"<>" (Bstr.string "1")) None;
-  test (Bstr.cut ~sep:"<>" (Bstr.string "123")) None;
-  test
-    (Bstr.cut ~sep:"<>" (Bstr.string "<>123"))
-    Bstr.(Some (string "", string "123"));
-  test
-    (Bstr.cut ~sep:"<>" (Bstr.string "123<>"))
-    Bstr.(Some (string "123", string ""));
-  test
-    (Bstr.cut ~sep:"<>" (Bstr.string "1<>2<>3"))
-    Bstr.(Some (string "1", string "2<>3"));
-  test
-    (Bstr.cut ~sep:"<>" (Bstr.string ">>><>>>><>>>><>>>>"))
-    Bstr.(Some (string ">>>", string ">>><>>>><>>>>"));
-  test
-    (Bstr.cut ~sep:"<->" (Bstr.string "<->>->"))
-    Bstr.(Some (string "", string ">->"));
-  test (Bstr.cut ~rev:true ~sep:"<->" (Bstr.string "<-")) None;
-  test
-    (Bstr.cut ~sep:"aa" (Bstr.string "aa"))
-    Bstr.(Some (string "", string ""));
-  test
-    (Bstr.cut ~sep:"aa" (Bstr.string "aaa"))
-    Bstr.(Some (string "", string "a"));
-  test
-    (Bstr.cut ~sep:"aa" (Bstr.string "aaaa"))
-    Bstr.(Some (string "", string "aa"));
-  test
-    (Bstr.cut ~sep:"aa" (Bstr.string "aaaaa"))
-    Bstr.(Some (string "", string "aaa"));
-  test
-    (Bstr.cut ~sep:"aa" (Bstr.string "aaaaaa"))
-    Bstr.(Some (string "", string "aaaa"));
-  test (Bstr.cut ~sep:"ab" (Bstr.string "faaaa")) None
+    (cut ~rev ~sep:"<>" (string ">>><>>>><>>>><>>>>"))
+    (Some (string ">>><>>>><>>>>", string ">>>"));
+  test (cut ~rev ~sep:"<->" (string "<->>->")) (Some (string "", string ">->"));
+  test (cut ~rev ~sep:"<->" (string "<-")) None;
+  test (cut ~rev ~sep:"aa" (string "aa")) (Some (string "", string ""));
+  test (cut ~rev ~sep:"aa" (string "aaa")) (Some (string "a", string ""));
+  test (cut ~rev ~sep:"aa" (string "aaaa")) (Some (string "aa", string ""));
+  test (cut ~rev ~sep:"aa" (string "aaaaa")) (Some (string "aaa", string ""));
+  test (cut ~rev ~sep:"aa" (string "aaaaaa")) (Some (string "aaaa", string ""));
+  test (cut ~rev ~sep:"ab" (string "afaaaa")) None
+
+let test64 =
+  let descr = {text|binary {u,}int8|text} in
+  Test.test ~title:"binary" ~descr @@ fun () ->
+  let t = Bstr.create 5 in
+  Bstr.set_int8 t 3 260;
+  Bstr.set_int8 t 2 1;
+  Bstr.set_int8 t 1 2;
+  Bstr.set_int8 t 0 3;
+  Bstr.set_int8 t 4 (-1);
+  check (Bstr.to_string t = "\003\002\001\004\255");
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
+  lazy (Bstr.set_int8 t 5 0) |> err;
+  lazy (Bstr.get_int8 t 5) |> err;
+  lazy (Bstr.set_uint8 t 5 0) |> err;
+  lazy (Bstr.get_uint8 t 5) |> err;
+  check (Bstr.get_int8 t 0 = 3);
+  check (Bstr.get_int8 t 1 = 2);
+  check (Bstr.get_int8 t 2 = 1);
+  check (Bstr.get_int8 t 3 = 4);
+  check (Bstr.get_int8 t 4 = -1);
+  check (Bstr.get_uint8 t 0 = 3);
+  check (Bstr.get_uint8 t 1 = 2);
+  check (Bstr.get_uint8 t 2 = 1);
+  check (Bstr.get_uint8 t 3 = 4);
+  check (Bstr.get_uint8 t 4 = 255);
+  let result = ref true in
+  for i = 0 to 255 do
+    Bstr.set_uint8 t 0 i;
+    result := !result || Bstr.get_uint8 t 0 = i
+  done;
+  for i = -128 to 127 do
+    Bstr.set_int8 t 0 i;
+    result := !result || Bstr.get_int8 t 0 = i
+  done;
+  check !result
+
+let test65 =
+  let descr = {text|binary {be,le,ne}{u,}int16|text} in
+  Test.test ~title:"binary {be,le,ne}{u,}int16" ~descr @@ fun () ->
+  let t = Bstr.create 3 in
+  Bstr.set_int16_le t 1 0x1234;
+  Bstr.set_int16_le t 0 0xabcd;
+  check (Bstr.to_string t = "\xcd\xab\x12");
+  check (Bstr.get_uint16_le t 0 = 0xabcd);
+  check (Bstr.get_uint16_le t 1 = 0x12ab);
+  check (Bstr.get_int16_le t 0 = 0xabcd - 0x10000);
+  check (Bstr.get_int16_le t 1 = 0x12ab);
+  check (Bstr.get_uint16_be t 1 = 0xab12);
+  check (Bstr.get_int16_be t 1 = 0xab12 - 0x10000);
+  let result = ref true in
+  for i = 0 to Bstr.length t - 2 do
+    let x = Bstr.get_int16_ne t i in
+    let fn = if Sys.big_endian then Bstr.get_int16_be else Bstr.get_int16_le in
+    result := !result || x = fn t i;
+    let x = Bstr.get_uint16_ne t i in
+    let fn =
+      if Sys.big_endian then Bstr.get_uint16_be else Bstr.get_uint16_le
+    in
+    result := !result || x = fn t i
+  done;
+  check !result;
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
+  lazy (Bstr.set_int16_le t 2 0) |> err;
+  lazy (Bstr.set_int16_ne t 2 0) |> err;
+  lazy (Bstr.set_int16_be t 2 0) |> err;
+  lazy (Bstr.get_int16_le t 2) |> err;
+  lazy (Bstr.get_int16_ne t 2) |> err;
+  lazy (Bstr.get_int16_be t 2) |> err;
+  lazy (Bstr.set_uint16_le t 2 0) |> err;
+  lazy (Bstr.set_uint16_ne t 2 0) |> err;
+  lazy (Bstr.set_uint16_be t 2 0) |> err;
+  lazy (Bstr.get_uint16_le t 2) |> err;
+  lazy (Bstr.get_uint16_ne t 2) |> err;
+  lazy (Bstr.get_uint16_be t 2) |> err;
+  let result = ref true in
+  for i = 0 to 0xffff do
+    Bstr.set_uint16_le t 0 i;
+    result := !result || Bstr.get_uint16_le t 0 = i;
+    Bstr.set_uint16_be t 0 i;
+    result := !result || Bstr.get_uint16_be t 0 = i;
+    Bstr.set_uint16_ne t 0 i;
+    result := !result || Bstr.get_uint16_ne t 0 = i;
+    let fn = if Sys.big_endian then Bstr.get_int16_be else Bstr.get_int16_le in
+    result := !result || fn t 0 = i
+  done;
+  check !result
+
+let test66 =
+  let descr = {text|binary {be,le,ne}int32|text} in
+  Test.test ~title:"binary {be,le,ne}int32" ~descr @@ fun () ->
+  let t = Bstr.make 6 '\000' in
+  Bstr.set_int32_le t 1 0x01234567l;
+  Bstr.set_int32_le t 0 0x89abcdefl;
+  check (Bstr.to_string t = "\xef\xcd\xab\x89\x01\x00");
+  check (Bstr.get_int32_le t 0 = 0x89abcdefl);
+  check (Bstr.get_int32_be t 0 = 0xefcdab89l);
+  check (Bstr.get_int32_le t 1 = 0x0189abcdl);
+  check (Bstr.get_int32_be t 1 = 0xcdab8901l);
+  Bstr.set_int32_be t 1 0x01234567l;
+  Bstr.set_int32_be t 0 0x89abcdefl;
+  check (Bstr.to_string t = "\x89\xab\xcd\xef\x67\x00");
+  Bstr.set_int32_ne t 0 0x01234567l;
+  check (Bstr.get_int32_ne t 0 = 0x01234567l);
+  let str =
+    if Sys.big_endian then "\x01\x23\x45\x67\x67\x00"
+    else "\x67\x45\x23\x01\x67\x00"
+  in
+  check (Bstr.to_string t = str);
+  Bstr.set_int32_ne t 0 0xffffffffl;
+  check (Bstr.get_int32_ne t 0 = 0xffffffffl);
+  let result = ref true in
+  for i = 0 to Bstr.length t - 4 do
+    let x = Bstr.get_int32_ne t i in
+    let fn = if Sys.big_endian then Bstr.get_int32_be else Bstr.get_int32_le in
+    result := !result || x = fn t i
+  done;
+  check !result;
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
+  lazy (Bstr.set_int32_le t 3 0l) |> err;
+  lazy (Bstr.set_int32_ne t 3 0l) |> err;
+  lazy (Bstr.set_int32_be t 3 0l) |> err;
+  lazy (Bstr.get_int32_le t 3) |> err;
+  lazy (Bstr.get_int32_ne t 3) |> err;
+  lazy (Bstr.get_int32_be t 3) |> err
+
+let test67 =
+  let descr = {text|binary {be,le,ne}int64|text} in
+  Test.test ~title:"binary {be,le,ne}int64" ~descr @@ fun () ->
+  let t = Bstr.make 10 '\000' in
+  Bstr.set_int64_le t 1 0x0123456789abcdefL;
+  Bstr.set_int64_le t 0 0x1032547698badcfeL;
+  check (Bstr.to_string t = "\xfe\xdc\xba\x98\x76\x54\x32\x10\x01\x00");
+  check (Bstr.get_int64_le t 0 = 0x1032547698badcfeL);
+  check (Bstr.get_int64_be t 0 = 0xfedcba9876543210L);
+  check (Bstr.get_int64_le t 1 = 0x011032547698badcL);
+  check (Bstr.get_int64_be t 1 = 0xdcba987654321001L);
+  Bstr.set_int64_be t 1 0x0123456789abcdefL;
+  Bstr.set_int64_be t 0 0x1032547698badcfeL;
+  check (Bstr.to_string t = "\x10\x32\x54\x76\x98\xba\xdc\xfe\xef\x00");
+  Bstr.set_int64_ne t 0 0x0123456789abcdefL;
+  check (Bstr.get_int64_ne t 0 = 0x0123456789abcdefL);
+  let str =
+    if Sys.big_endian then "\x01\x23\x45\x67\x89\xab\xcd\xef\xef\x00"
+    else "\xef\xcd\xab\x89\x67\x45\x23\x01\xef\x00"
+  in
+  check (Bstr.to_string t = str);
+  Bstr.set_int64_ne t 0 0xffffffffffffffffL;
+  check (Bstr.get_int64_ne t 0 = 0xffffffffffffffffL);
+  let result = ref true in
+  for i = 0 to Bstr.length t - 8 do
+    let x = Bstr.get_int64_ne t i in
+    let fn = if Sys.big_endian then Bstr.get_int64_be else Bstr.get_int64_le in
+    result := !result || x = fn t i
+  done;
+  check !result;
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
+  lazy (Bstr.set_int64_le t 3 0L) |> err;
+  lazy (Bstr.set_int64_ne t 3 0L) |> err;
+  lazy (Bstr.set_int64_be t 3 0L) |> err;
+  lazy (Bstr.get_int64_le t 3) |> err;
+  lazy (Bstr.get_int64_ne t 3) |> err;
+  lazy (Bstr.get_int64_be t 3) |> err
+
+let test68 =
+  let descr = {text|split_on_char|text} in
+  Test.test ~title:"split_on_char" ~descr @@ fun () ->
+  let t = Bstr.of_string " abc def " in
+  let check_split sep t =
+    Format.eprintf ">>> %S\n%!" (Bstr.to_string t);
+    let lst = Bstr.split_on_char sep t in
+    check (List.length lst > 0);
+    check (Bstr.equal (Bstr.concat (String.make 1 sep) lst) t);
+    List.iter (Bstr.iter (fun chr -> check (chr <> sep))) lst
+  in
+  for i = 0 to Bstr.length t do
+    check_split ' ' (Bstr.sub t ~off:0 ~len:i)
+  done
+
+let test69 =
+  let descr = {text|blit|text} in
+  Test.test ~title:"blit" ~descr @@ fun () ->
+  let str0 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ" in
+  let str1 = "abcdefghijklmnopqrstuvwxyz" in
+  let with_bufs fn =
+    let buf0 = Bstr.of_string str0 in
+    let buf1 = Bstr.of_string str1 in
+    fn buf0 buf1
+  in
+  let fn0 buf0 buf1 =
+    Bstr.blit buf0 ~src_off:0 buf1 ~dst_off:0 ~len:0;
+    check (Bstr.to_string buf1 = str1)
+  in
+  let fn1 buf0 buf1 =
+    Bstr.blit buf0 ~src_off:0 buf1 ~dst_off:0 ~len:(Bstr.length buf1);
+    check (Bstr.to_string buf1 = str0)
+  in
+  let fn2 buf0 _ =
+    Bstr.blit buf0 ~src_off:0 buf0 ~dst_off:0 ~len:(Bstr.length buf0);
+    check (Bstr.to_string buf0 = str0)
+  in
+  let fn3 buf0 buf1 =
+    Bstr.blit buf0 ~src_off:0 buf1 ~dst_off:4 ~len:8;
+    check (Bstr.to_string buf1 = "abcdABCDEFGHmnopqrstuvwxyz")
+  in
+  let fn4 buf0 _ =
+    Bstr.blit buf0 ~src_off:0 buf0 ~dst_off:4 ~len:8;
+    check (Bstr.to_string buf0 = "ABCDABCDEFGHMNOPQRSTUVWXYZ")
+  in
+  with_bufs fn0; with_bufs fn1; with_bufs fn2; with_bufs fn3; with_bufs fn4
 
 let ( / ) = Filename.concat
 
@@ -891,7 +1129,8 @@ let () =
     ; test28; test29; test30; test31; test32; test33; test34; test35; test36
     ; test37; test38; test39; test40; test41; test42; test43; test44; test45
     ; test46; test47; test48; test49; test50; test51; test52; test53; test54
-    ; test55; test56; test57; test58; test59; test60; test61; test62
+    ; test55; test56; test57; test58; test59; test60; test61; test62; test63
+    ; test64; test65; test66; test67; test68; test69
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in

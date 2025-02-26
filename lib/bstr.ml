@@ -684,6 +684,39 @@ let split_on_char sep bstr =
   done;
   sub bstr ~off:0 ~len:!max :: !lst
 
+let concat sep = function
+  | [] -> empty
+  | lst ->
+      let sep_len = String.length sep in
+      let res_len =
+        let rec go acc = function
+          | [] -> acc
+          | [ x ] -> acc + length x
+          | x :: r -> go (acc + length x + sep_len) r
+        in
+        go 0 lst
+      in
+      let res = create res_len in
+      let rec go dst_off = function
+        | [] -> ()
+        | [ x ] ->
+            let len = length x in
+            blit x ~src_off:0 res ~dst_off ~len
+        | x :: r ->
+            let len = length x in
+            blit x ~src_off:0 res ~dst_off ~len;
+            let dst_off = dst_off + len in
+            blit_from_string sep ~src_off:0 res ~dst_off ~len:sep_len;
+            let dst_off = dst_off + sep_len in
+            go dst_off r
+      in
+      go 0 lst; res
+
+let iter fn t =
+  for i = 0 to length t - 1 do
+    fn (unsafe_get t i)
+  done
+
 let to_seq bstr =
   let rec go idx () =
     if idx == length bstr then Seq.Nil

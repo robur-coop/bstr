@@ -6,3 +6,27 @@ in OCaml. This short tutorial aims to be exhaustive about the advantages and
 disadvantages of these 3 types.
 
 {2 Bytes & String.}
+
+Bytes and string are the basic OCaml types that refer to values that are
+sequences of bytes. For example, this is a string:
+{[
+let str : string = "Hello World!"
+]}
+
+These two types share the same memory representation. However, bytes can be
+modified, whereas strings are constants.
+{[
+let buf : bytes = Bytes.of_string "Hello World!"
+let () = Bytes.set buf 11 '\n'
+]}
+
+The memory representation of these values follows a few rules:
+- The total size is always aligned with the machine word (4-bytes for a 32-bit
+  machine or 8-bytes for a 64-bit machine), a "pad" is always is added to be
+  aligned to it.
+- The "pad" always contains the value [0] for the first byte — therefore, at the
+  end of the byte sequence. This allows a transition from an OCaml "string" to a
+  C "string" at no extra cost.
+
+A special feature of this value is that it can be allocated in the minor heap.
+Allocation in the minor heap in OCaml is very fast (3 processor instructions).

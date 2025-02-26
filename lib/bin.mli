@@ -3,8 +3,14 @@ type 'a t
 (** {1:primitives Primitives.} *)
 
 val char : char t
+(** [char] is a representation of the character type. *)
+
 val uint8 : int t
+(** [uint8] is a representation of unsigned 8-bit integers. *)
+
 val int8 : int t
+(** [int8] is a representation of 8-bit integers. *)
+
 val beuint16 : int t
 val leuint16 : int t
 val neuint16 : int t
@@ -17,8 +23,7 @@ val neint32 : int32 t
 val beint64 : int64 t
 val leint64 : int64 t
 val neint64 : int64 t
-val varint31 : int t
-val varint63 : int t
+val varint : int t
 val bytes : int -> string t
 val cstring : string t
 val until : char -> string t
@@ -147,10 +152,22 @@ val to_string : 'a t -> 'a -> string
 
 module Size : sig
   type -'a size_of
+  (** The type for size function related to binary encoder/decoder. *)
 
   val size_of : 'a t -> 'a size_of
 
-  type 'a t = private Static of int | Dynamic of 'a | Unknown
+  type 'a t = private
+    | Static of int
+    | Dynamic of 'a
+    | Unknown
+        (** A value representing information known about the length in bytes of
+            encodings produced by a particular binary codec:
+            - [Static n]: all encodings produced by this codec have length [n];
+            - [Dynamic fn]: the length of binary encodings is dependent on the
+              specific value, but may be efficiently computed at run-time via
+              the function [fn];
+            - [Unknown]: this codec may produce encodings that cannot be
+              efficiently pre-computed. *)
 
   val of_encoding : 'a size_of -> (Bstr.t -> int -> int) t
   val of_value : 'a size_of -> ('a -> int) t

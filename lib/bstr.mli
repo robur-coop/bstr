@@ -117,6 +117,11 @@ val memmove : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
       [dst_off] and [len] do not designate a valid range of [dst]. *)
 
 val memcmp : t -> src_off:int -> t -> dst_off:int -> len:int -> int
+(** [memcmp s1 ~src_off s2 ~dst_off ~len] compares the first [len] bytes of the
+    memory areas [s1] (starting at [src_off]) and [s2] (starting at [dst_off]).
+
+    [memcmp] returns [0] is [s1] anmd [s2] don't match. *)
+
 val memchr : t -> off:int -> len:int -> char -> int
 val memset : t -> off:int -> len:int -> char -> unit
 
@@ -503,6 +508,24 @@ val cut : ?rev:bool -> sep:string -> t -> (t * t) option
     @raise Invalid_argument if [sep] is the empty buffer. *)
 
 val split_on_char : char -> t -> t list
+(** [split_on_char sep t] is the list of all (possibly empty)
+    {!val:sub}-bigstrings of [t] that are delimited by the character [sep]. If
+    [t] is empty, the result is the singleton list {[[ empty ]]}.
+
+    The function's result is specified by the following invariant:
+    - the list is not empty.
+    - concatenating its elements using [sep] as a separator returns a bigstring
+      equal to the input.
+    - no bigstring in the result contains the [sep] character. *)
+
+val concat : string -> t list -> t
+(** [concat sep ts] concatenates the list of bigstrings [ts], inserting the
+    separator string [sep] between each. *)
+
+val iter : (char -> unit) -> t -> unit
+(** [iter fn t] applies function [fn] in turn to all the characters of [t]. It
+    is equivalent to [fn t.{0}; fn t.{1}; ...; fn t.{length t - 1}; ()]. *)
+
 val to_seq : t -> char Seq.t
 val to_seqi : t -> (int * char) Seq.t
 val of_seq : char Seq.t -> t

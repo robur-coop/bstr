@@ -42,7 +42,7 @@ void bstr_native_memcpy(value src, intnat src_off, value dst, intnat dst_off,
     || is_mmaped(Caml_ba_array_val(dst));
 
   if (leave_runtime) caml_enter_blocking_section();
-  memcpy(bstr_uint8_off(src, src_off), bstr_uint8_off(dst, dst_off), len);
+  memcpy(bstr_uint8_off(dst, dst_off), bstr_uint8_off(src, src_off), len);
   if (leave_runtime) caml_leave_blocking_section();
 }
 
@@ -62,7 +62,7 @@ void bstr_native_memmove(value src, intnat src_off, value dst, intnat dst_off,
     || is_mmaped(Caml_ba_array_val(dst));
 
   if (leave_runtime) caml_enter_blocking_section();
-  memmove(bstr_uint8_off(src, src_off), bstr_uint8_off(dst, dst_off), len);
+  memmove(bstr_uint8_off(dst, dst_off), bstr_uint8_off(src, src_off), len);
   if (leave_runtime) caml_leave_blocking_section();
 }
 
@@ -74,19 +74,19 @@ CAMLprim value bstr_bytecode_memmove(value src, value src_off, value dst,
   CAMLreturn(Val_unit);
 }
 
-intnat bstr_native_memcmp(value src, intnat src_off, value dst, intnat dst_off,
+intnat bstr_native_memcmp(value s1, intnat s1_off, value s2, intnat s2_off,
                           intnat len) {
   intnat res;
-  res = memcmp(bstr_uint8_off(src, src_off), bstr_uint8_off(dst, dst_off), len);
+  res = memcmp(bstr_uint8_off(s1, s1_off), bstr_uint8_off(s2, s2_off), len);
   return (res);
 }
 
-CAMLprim value bstr_bytecode_memcmp(value src, value src_off, value dst,
-                                    value dst_off, value len) {
-  CAMLparam5(src, src_off, dst, dst_off, len);
+CAMLprim value bstr_bytecode_memcmp(value s1, value s1_off, value s2,
+                                    value s2_off, value len) {
+  CAMLparam5(s1, s1_off, s2, s2_off, len);
   intnat res;
-  res = bstr_native_memcmp(src, Unsigned_long_val(src_off), dst,
-                           Unsigned_long_val(dst_off), Unsigned_long_val(len));
+  res = bstr_native_memcmp(s1, Unsigned_long_val(s1_off), s2,
+                           Unsigned_long_val(s2_off), Unsigned_long_val(len));
   CAMLreturn(Val_long(res));
 }
 

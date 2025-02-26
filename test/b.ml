@@ -24,12 +24,12 @@ let test02 =
   let buf = Bstr.create 0x7ff in
   let test value expected =
     let pos = ref 0 in
-    Bin.encode_bstr Bin.varint31 value buf pos;
+    Bin.encode_bstr Bin.varint value buf pos;
     let len = String.length expected in
     check (!pos == len);
     check (Bstr.sub_string buf ~off:0 ~len = expected);
     pos := 0;
-    let value' = Bin.decode_bstr Bin.varint31 buf pos in
+    let value' = Bin.decode_bstr Bin.varint buf pos in
     check (!pos == len);
     check (value == value')
   in

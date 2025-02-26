@@ -41,8 +41,7 @@ and _ primary =
   | Int16 : endianness -> int primary
   | Int32 : endianness -> int32 primary
   | Int64 : endianness -> int64 primary
-  | Var_int31 : int primary
-  | Var_int63 : int primary
+  | Var_int : int primary
   | Bytes : int -> string primary
   | CString : string primary
   | Until : char -> string primary
@@ -106,6 +105,21 @@ end
 
 (* sizer *)
 
+let decode_varint bstr pos =
+  let bits = ref 0 in
+  let res = ref 0 in
+  while
+    let cmd = Bstr.get_uint8 bstr !pos in
+    incr pos;
+    res := !res lor ((cmd land 0x7f) lsl !bits);
+    bits := !bits + 7;
+    cmd land 0x80 != 0
+  do
+    ()
+  done;
+  !res
+[@@inline always]
+
 module Size = struct
   type 'a encoding = 'a t
   type 'a t = Static of int | Dynamic of 'a | Unknown
@@ -166,7 +180,7 @@ module Size = struct
       let of_value = map (fun size_of x -> size_of (fn x)) t.of_value in
       { t with of_value }
 
-    let _unknown = { of_value= Unknown; of_encoding= Unknown }
+    let unknown = { of_value= Unknown; of_encoding= Unknown }
   end
 
   type 'a size_of = 'a Sizer.t
@@ -227,7 +241,7 @@ module Size = struct
   let rec size_of : type a. a encoding -> a Sizer.t = function
     | Primary p -> prim p
     | Record r -> record r
-    | Variant _ -> assert false
+    | Variant v -> variant v
     | Map m -> map m
 
   and prim : type a. a primary -> a Sizer.t = function
@@ -239,8 +253,7 @@ module Size = struct
     | Int32 _ -> Sizer.static 4
     | Int64 _ -> Sizer.static 8
     | Bytes len -> Sizer.static len
-    | Var_int31 -> sizer_varint
-    | Var_int63 -> sizer_varint
+    | Var_int -> sizer_varint
     | CString -> sizer_cstring
     | Until p -> sizer_until p
 
@@ -252,6 +265,81 @@ module Size = struct
 
   and map : type a b. (a, b) map -> b Sizer.t =
    fun { x; g; _ } -> Sizer.using g (size_of x)
+
+  and variant : type a. a variant -> a Sizer.t =
+   fun v ->
+    let static_varint_size n =
+      let[@warning "-8"] (Dynamic fn) = sizer_varint.Sizer.of_value in
+      fn n
+    in
+    let case_lengths : (int * a Sizer.t) array =
+      let fn = function
+        | C0 { ctag0; _ } -> (static_varint_size ctag0, Sizer.static 0)
+        | C1 { ctag1; ctype1; cwitn1= expected; _ } ->
+            let tag_length = static_varint_size ctag1 in
+            let arg_length =
+              match size_of ctype1 with
+              | ({ of_value= Static _; _ } | { of_value= Unknown; _ }) as t -> t
+              | { of_value= Dynamic of_value; of_encoding } ->
+                  let of_value a =
+                    match v.vget a with
+                    | CV0 _ -> assert false
+                    | CV1 ({ cwitn1= received; _ }, args) ->
+                        let v = Witness.cast_exn received expected args in
+                        of_value v
+                  in
+                  { of_value= Dynamic of_value; of_encoding }
+            in
+            (tag_length, arg_length)
+      in
+      Array.map fn v.vcases
+    in
+    let non_dynamic_length =
+      let rec go static_so_far = function
+        | -1 -> Option.map Sizer.static static_so_far
+        | i -> begin
+            match case_lengths.(i) with
+            | _, { of_value= Unknown; _ } -> Some Sizer.unknown
+            | _, { of_value= Dynamic _; _ } -> None
+            | tag_len, { of_value= Static arg_len; _ } ->
+                let len = tag_len + arg_len in
+                begin
+                  match static_so_far with
+                  | None -> go (Some len) (i - 1)
+                  | Some len' when len = len' -> go static_so_far (i - 1)
+                  | Some _ -> None
+                end
+          end
+      in
+      go None (Array.length case_lengths - 1)
+    in
+    match non_dynamic_length with
+    | Some x -> x
+    | None ->
+        let of_value a =
+          let tag =
+            match v.vget a with
+            | CV0 { ctag0; _ } -> ctag0
+            | CV1 ({ ctag1; _ }, _) -> ctag1
+          in
+          let tag_length, arg_length = case_lengths.(tag) in
+          let arg_length =
+            match arg_length.of_value with
+            | Dynamic fn -> fn a
+            | Static n -> n
+            | Unknown -> assert false
+          in
+          tag_length + arg_length
+        in
+        let of_encoding buf (Offset.Offset off) =
+          let off = ref off in
+          let tag = decode_varint buf off in
+          match case_lengths.(tag) with
+          | _, { of_encoding= Static n; _ } -> Offset.Offset (!off + n)
+          | _, { of_encoding= Dynamic fn; _ } -> fn buf (Offset.Offset !off)
+          | _, { of_encoding= Unknown; _ } -> assert false
+        in
+        Sizer.dynamic ~of_value ~of_encoding
 end
 
 module Dispatch = struct
@@ -352,21 +440,6 @@ module Bstr = struct
     Bstr.sub_string bstr ~off ~len
   [@@inline always]
 
-  let decode_varint bstr pos =
-    let bits = ref 0 in
-    let res = ref 0 in
-    while
-      let cmd = Bstr.get_uint8 bstr !pos in
-      incr pos;
-      res := !res lor ((cmd land 0x7f) lsl !bits);
-      bits := !bits + 7;
-      cmd land 0x80 != 0
-    do
-      ()
-    done;
-    !res
-  [@@inline always]
-
   let decode_cstring bstr pos =
     let off = !pos in
     while Bstr.get_uint8 bstr !pos != 0 do
@@ -402,8 +475,7 @@ module Bstr = struct
     | Int32 e -> decode_int32 e
     | Int64 e -> decode_int64 e
     | Bytes len -> decode_bytes len
-    | Var_int31 -> decode_varint
-    | Var_int63 -> decode_varint
+    | Var_int -> decode_varint
     | CString -> decode_cstring
     | Until p -> decode_until p
 
@@ -539,8 +611,7 @@ module Bstr = struct
     | Int32 e -> encode_int32 e
     | Int64 e -> encode_int64 e
     | Bytes len -> encode_bytes len
-    | Var_int31 -> encode_varint
-    | Var_int63 -> encode_varint
+    | Var_int -> encode_varint
     | CString -> encode_cstring
     | Until _ -> encode_until
 
@@ -668,8 +739,7 @@ module Bytes = struct
     | Int32 e -> encode_int32 e
     | Int64 e -> encode_int64 e
     | Bytes len -> encode_bytes len
-    | Var_int31 -> encode_varint
-    | Var_int63 -> encode_varint
+    | Var_int -> encode_varint
     | CString -> encode_cstring
     | Until _ -> encode_until
 
@@ -715,8 +785,7 @@ let neint32 = Primary (Int32 Native_endian)
 let beint64 = Primary (Int64 Big_endian)
 let leint64 = Primary (Int64 Little_endian)
 let neint64 = Primary (Int64 Native_endian)
-let varint31 = Primary Var_int31
-let varint63 = Primary Var_int63
+let varint = Primary Var_int
 let bytes len = Primary (Bytes len)
 let cstring = Primary CString
 let until byte = Primary (Until byte)
