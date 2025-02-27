@@ -25,6 +25,7 @@ val leint64 : int64 t
 val neint64 : int64 t
 val varint : int t
 val bytes : int -> string t
+val bstr : int -> Bstr.t t
 val cstring : string t
 val until : char -> string t
 

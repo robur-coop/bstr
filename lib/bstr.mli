@@ -510,7 +510,7 @@ val cut : ?rev:bool -> sep:string -> t -> (t * t) option
 val split_on_char : char -> t -> t list
 (** [split_on_char sep t] is the list of all (possibly empty)
     {!val:sub}-bigstrings of [t] that are delimited by the character [sep]. If
-    [t] is empty, the result is the singleton list {[[ empty ]]}.
+    [t] is empty, the result is the singleton list [[empty]].
 
     The function's result is specified by the following invariant:
     - the list is not empty.
