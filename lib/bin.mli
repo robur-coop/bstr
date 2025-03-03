@@ -99,6 +99,7 @@ val bstr : int -> Bstr.t t
 val cstring : string t
 val until : char -> string t
 val const : 'a -> 'a t
+val seq : len:int -> 'a t -> 'a array t
 
 val map : 'b t -> ('b -> 'a) -> ('a -> 'b) -> 'a t
 (** This combinator allows defining a representative of one type in terms of

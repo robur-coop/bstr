@@ -32,6 +32,7 @@ type _ t =
   | Record : 'a record -> 'a t
   | Variant : 'a variant -> 'a t
   | Map : ('a, 'b) map -> 'b t
+  | Seq : 'a len_v -> 'a array t
 
 and _ primary =
   | Char : char primary
@@ -48,6 +49,7 @@ and _ primary =
   | Bstr : int -> Bstr.t primary
   | Const : 'a -> 'a primary
 
+and 'a len_v = { llen: int; lval: 'a t }
 and _ a_case = C0 : 'a case0 -> 'a a_case | C1 : ('a, 'b) case1 -> 'a a_case
 
 and _ case_v =
@@ -131,6 +133,8 @@ module Size = struct
     | Unknown -> Unknown
     | Static n -> Static n
     | Dynamic a -> Dynamic (fn a)
+
+  let ( let+ ) x f = map f x
 
   module Offset = struct
     type t = Offset of int [@@unboxed]
@@ -245,6 +249,26 @@ module Size = struct
     | Record r -> record r
     | Variant v -> variant v
     | Map m -> map m
+    | Seq { llen; lval } -> seq ~llen lval
+
+  and seq : type a. llen:int -> a encoding -> a array Sizer.t =
+   fun ~llen lval ->
+    match size_of lval with
+    | { Sizer.of_value= Static len; _ } -> Sizer.static (llen * len)
+    | lsize ->
+        let of_value =
+          let+ len = lsize.Sizer.of_value in
+          Array.fold_left (fun acc x -> acc + len x) 0
+        in
+        let of_encoding =
+          let+ len = lsize.Sizer.of_encoding in
+          let rec go buf off = function
+            | 0 -> off
+            | n -> go buf (len buf off) (n - 1)
+          in
+          fun buf off -> go buf off llen
+        in
+        { Sizer.of_value; of_encoding }
 
   and prim : type a. a primary -> a Sizer.t = function
     | Char -> Sizer.static 1
@@ -475,6 +499,15 @@ module Bytes = struct
     | Map m -> map m
     | Record r -> record r
     | Variant v -> variant v
+    | Seq { llen; lval } -> seq ~len:llen lval
+
+  and seq : type a. len:int -> a t -> a array encoder =
+   fun ~len t arr buf off ->
+    if Array.length arr != len then
+      invalid_arg "Impossible to encode such sequence: lengths mismatch";
+    for i = 0 to len - 1 do
+      encode t (Array.unsafe_get arr i) buf off
+    done
 
   and prim : type a. a primary -> a encoder = function
     | Char -> encode_char
@@ -613,6 +646,12 @@ module Bstr = struct
     | Record r -> record r
     | Variant v -> variant v
     | Map m -> map m
+    | Seq { llen; lval } -> seq ~len:llen lval
+
+  and seq : type a. len:int -> a t -> a array decoder =
+   fun ~len t bstr pos ->
+    let fn _idx = decode t bstr pos in
+    Array.init len fn
 
   and prim : type a. a primary -> a decoder = function
     | Char -> decode_char
@@ -756,6 +795,15 @@ module Bstr = struct
     | Map m -> map m
     | Record r -> record r
     | Variant v -> variant v
+    | Seq { llen; lval } -> seq ~len:llen lval
+
+  and seq : type a. len:int -> a t -> a array encoder =
+   fun ~len t arr buf off ->
+    if Array.length arr != len then
+      invalid_arg "Impossible to encode such sequence: lengths mismatch";
+    for i = 0 to len - 1 do
+      encode t (Array.unsafe_get arr i) buf off
+    done
 
   and prim : type a. a primary -> a encoder = function
     | Char -> encode_char
@@ -876,6 +924,10 @@ let ( |~ ) = app
 (* map *)
 
 let map x f g = Map { x; f; g; mwit= Witness.make () }
+
+let seq ~len:llen lval =
+  if llen <= 0 then invalid_arg "Bin.seq";
+  Seq { llen; lval }
 
 let size_of_value t value =
   let sizer = Size.size_of t in
