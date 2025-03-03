@@ -222,6 +222,7 @@ val decode_bstr : 'a t -> Bstr.t -> int ref -> 'a
 
 val encode_bstr : 'a t -> 'a -> Bstr.t -> int ref -> unit
 val to_string : 'a t -> 'a -> string
+val decode : 'a t -> string -> int ref -> 'a
 
 module Size : sig
   type -'a size_of

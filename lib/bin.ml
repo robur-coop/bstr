@@ -109,11 +109,26 @@ end
 
 (* sizer *)
 
-let decode_varint bstr pos =
+let bstr_decode_varint bstr pos =
   let bits = ref 0 in
   let res = ref 0 in
   while
     let cmd = Bstr.get_uint8 bstr !pos in
+    incr pos;
+    res := !res lor ((cmd land 0x7f) lsl !bits);
+    bits := !bits + 7;
+    cmd land 0x80 != 0
+  do
+    ()
+  done;
+  !res
+[@@inline always]
+
+let string_decode_varint str pos =
+  let bits = ref 0 in
+  let res = ref 0 in
+  while
+    let cmd = String.get_uint8 str !pos in
     incr pos;
     res := !res lor ((cmd land 0x7f) lsl !bits);
     bits := !bits + 7;
@@ -361,7 +376,7 @@ module Size = struct
         in
         let of_encoding buf (Offset.Offset off) =
           let off = ref off in
-          let tag = decode_varint buf off in
+          let tag = bstr_decode_varint buf off in
           match case_lengths.(tag) with
           | _, { of_encoding= Static n; _ } -> Offset.Offset (!off + n)
           | _, { of_encoding= Dynamic fn; _ } -> fn buf (Offset.Offset !off)
@@ -546,6 +561,162 @@ module Bytes = struct
    fun { x; g; _ } -> fun u buf off -> encode x (g u) buf off
 end
 
+(* decoder for [string] *)
+
+module String = struct
+  module Record_decoder = Fields_folder (struct
+    type ('a, 'b) t = string -> int ref -> 'b -> 'a
+  end)
+
+  type 'a decoder = string -> int ref -> 'a
+
+  let decode_char str pos =
+    let idx = !pos in
+    incr pos; String.get str idx
+  [@@inline always]
+
+  let decode_uint8 str pos =
+    let idx = !pos in
+    incr pos; String.get_uint8 str idx
+  [@@inline always]
+
+  let decode_int8 str pos =
+    let idx = !pos in
+    incr pos; String.get_int8 str idx
+  [@@inline always]
+
+  let decode_uint16 e str pos =
+    let idx = !pos in
+    pos := !pos + 2;
+    match e with
+    | Big_endian -> String.get_uint16_be str idx
+    | Little_endian -> String.get_uint16_le str idx
+    | Native_endian -> String.get_uint16_ne str idx
+  [@@inline always]
+
+  let decode_int16 endian str pos =
+    let idx = !pos in
+    pos := !pos + 2;
+    match endian with
+    | Big_endian -> String.get_int16_be str idx
+    | Little_endian -> String.get_int16_le str idx
+    | Native_endian -> String.get_int16_ne str idx
+  [@@inline always]
+
+  let decode_int32 endian str pos =
+    let idx = !pos in
+    pos := !pos + 4;
+    match endian with
+    | Big_endian -> String.get_int32_be str idx
+    | Little_endian -> String.get_int32_le str idx
+    | Native_endian -> String.get_int32_ne str idx
+  [@@inline always]
+
+  let decode_int64 endian str pos =
+    let idx = !pos in
+    pos := !pos + 8;
+    match endian with
+    | Big_endian -> String.get_int64_be str idx
+    | Little_endian -> String.get_int64_le str idx
+    | Native_endian -> String.get_int64_ne str idx
+  [@@inline always]
+
+  let decode_bytes len str pos =
+    let off = !pos in
+    pos := !pos + len;
+    String.sub str off len
+  [@@inline always]
+
+  let decode_bstr len str pos =
+    if len == 0 then Bstr.empty
+    else begin
+      let src_off = !pos in
+      pos := !pos + len;
+      let bstr = Bstr.create len in
+      Bstr.blit_from_string str ~src_off bstr ~dst_off:0 ~len;
+      bstr
+    end
+  [@@inline always]
+
+  let decode_cstring str pos =
+    let off = !pos in
+    while String.get_uint8 str !pos != 0 do
+      incr pos
+    done;
+    let len = !pos - off in
+    let str = String.sub str off len in
+    incr pos; str
+  [@@inline always]
+
+  let decode_until byte str pos =
+    let predicate byte' = byte != byte' in
+    let off = !pos in
+    while predicate (String.get str !pos) == false do
+      incr pos
+    done;
+    let len = !pos - off in
+    String.sub str off len
+  [@@inline always]
+
+  let rec decode : type a. a t -> a decoder = function
+    | Primary p -> prim p
+    | Record r -> record r
+    | Variant v -> variant v
+    | Map m -> map m
+    | Seq { llen; lval } -> seq ~len:llen lval
+
+  and seq : type a. len:int -> a t -> a array decoder =
+   fun ~len t bstr pos ->
+    let fn _idx = decode t bstr pos in
+    Array.init len fn
+
+  and prim : type a. a primary -> a decoder = function
+    | Char -> decode_char
+    | UInt8 -> decode_uint8
+    | Int8 -> decode_int8
+    | UInt16 e -> decode_uint16 e
+    | Int16 e -> decode_int16 e
+    | Int32 e -> decode_int32 e
+    | Int64 e -> decode_int64 e
+    | Bytes len -> decode_bytes len
+    | Var_int -> string_decode_varint
+    | CString -> decode_cstring
+    | Until p -> decode_until p
+    | Bstr len -> decode_bstr len
+    | Const v -> fun _bstr _off -> v
+
+  and map : type a b. (a, b) map -> b decoder =
+   fun { x; f; _ } -> fun buf pos -> f (decode x buf pos)
+
+  and record : type a. a record -> a decoder =
+   fun { rfields= Fields (fs, constr); _ } ->
+    let nil _bstr _pos fn = fn in
+    let cons { ftype; _ } k =
+      let decode = decode ftype in
+      fun bstr pos constr ->
+        let x = decode bstr pos in
+        let constr = constr x in
+        k bstr pos constr
+    in
+    let fn = Record_decoder.fold { nil; cons } fs in
+    fun bstr pos -> fn bstr pos constr
+
+  and variant : type a. a variant -> a decoder =
+   fun v ->
+    let decoders : a decoder array =
+      let fn = function
+        | C0 c -> fun _ _ -> c.c0
+        | C1 c ->
+            let decode_arg = decode c.ctype1 in
+            fun bstr pos -> c.c1 (decode_arg bstr pos)
+      in
+      Array.map fn v.vcases
+    in
+    fun str pos ->
+      let i = string_decode_varint str pos in
+      decoders.(i) str pos
+end
+
 (* decoder & encoder for [bstr] *)
 
 module Bstr = struct
@@ -634,7 +805,7 @@ module Bstr = struct
   let decode_until byte bstr pos =
     let predicate byte' = byte != byte' in
     let off = !pos in
-    while predicate (Bstr.get bstr !pos) = false do
+    while predicate (Bstr.get bstr !pos) == false do
       incr pos
     done;
     let len = !pos - off in
@@ -662,7 +833,7 @@ module Bstr = struct
     | Int32 e -> decode_int32 e
     | Int64 e -> decode_int64 e
     | Bytes len -> decode_bytes len
-    | Var_int -> decode_varint
+    | Var_int -> bstr_decode_varint
     | CString -> decode_cstring
     | Until p -> decode_until p
     | Bstr len -> decode_bstr len
@@ -696,7 +867,7 @@ module Bstr = struct
       Array.map fn v.vcases
     in
     fun bstr pos ->
-      let i = decode_varint bstr pos in
+      let i = bstr_decode_varint bstr pos in
       decoders.(i) bstr pos
 
   type 'a encoder = 'a -> Bstr.t -> int ref -> unit
@@ -778,7 +949,7 @@ module Bstr = struct
 
   let encode_cstring src bstr off =
     let pos = !off in
-    let len = String.length src in
+    let len = Stdlib.String.length src in
     off := !off + len;
     Bstr.blit_from_string src ~src_off:0 bstr ~dst_off:pos ~len;
     Bstr.set_uint8 bstr !off 0;
@@ -786,7 +957,7 @@ module Bstr = struct
 
   let encode_until src bstr off =
     let pos = !off in
-    let len = String.length src in
+    let len = Stdlib.String.length src in
     off := !off + len;
     Bstr.blit_from_string src ~src_off:0 bstr ~dst_off:pos ~len
 
@@ -844,6 +1015,29 @@ end
 
 let decode_bstr = Bstr.decode
 let encode_bstr = Bstr.encode
+let decode = String.decode
+
+let size_of_value t value =
+  let sizer = Size.size_of t in
+  match Size.of_value sizer with
+  | Size.Static len -> Some len
+  | Size.Dynamic fn -> Some (fn value)
+  | Size.Unknown -> None
+
+let size_of_bstr ?(off = 0) t bstr =
+  let sizer = Size.size_of t in
+  match Size.of_encoding sizer with
+  | Size.Static len -> Some len
+  | Size.Dynamic fn -> Some (fn bstr off)
+  | Size.Unknown -> None
+
+let to_string t value =
+  match size_of_value t value with
+  | Some len ->
+      let buf = Stdlib.Bytes.create len in
+      Bytes.encode t value buf (ref 0);
+      Stdlib.Bytes.unsafe_to_string buf
+  | None -> assert false (* TODO(dinosaure): with [Buffer.t]. *)
 
 (* combinators *)
 
@@ -928,25 +1122,3 @@ let map x f g = Map { x; f; g; mwit= Witness.make () }
 let seq ~len:llen lval =
   if llen <= 0 then invalid_arg "Bin.seq";
   Seq { llen; lval }
-
-let size_of_value t value =
-  let sizer = Size.size_of t in
-  match Size.of_value sizer with
-  | Size.Static len -> Some len
-  | Size.Dynamic fn -> Some (fn value)
-  | Size.Unknown -> None
-
-let size_of_bstr ?(off = 0) t bstr =
-  let sizer = Size.size_of t in
-  match Size.of_encoding sizer with
-  | Size.Static len -> Some len
-  | Size.Dynamic fn -> Some (fn bstr off)
-  | Size.Unknown -> None
-
-let to_string t value =
-  match size_of_value t value with
-  | Some len ->
-      let buf = Stdlib.Bytes.create len in
-      Bytes.encode t value buf (ref 0);
-      Stdlib.Bytes.unsafe_to_string buf
-  | None -> assert false (* TODO(dinosaure): with [Buffer.t]. *)
