@@ -1076,7 +1076,6 @@ let test68 =
   Test.test ~title:"split_on_char" ~descr @@ fun () ->
   let t = Bstr.of_string " abc def " in
   let check_split sep t =
-    Format.eprintf ">>> %S\n%!" (Bstr.to_string t);
     let lst = Bstr.split_on_char sep t in
     check (List.length lst > 0);
     check (Bstr.equal (Bstr.concat (String.make 1 sep) lst) t);
@@ -1118,6 +1117,57 @@ let test69 =
   in
   with_bufs fn0; with_bufs fn1; with_bufs fn2; with_bufs fn3; with_bufs fn4
 
+let test70 =
+  let descr = {text|overlap|text} in
+  Test.test ~title:"overlap" ~descr @@ fun () ->
+  let test value expected =
+    match (value, expected) with
+    | None, None -> check true
+    | Some (len, a, b), Some (len', x, y) ->
+        check (a == x && b == y && len == len')
+    | _ -> check false
+  in
+  let t = Bstr.create 10 in
+  let ab = Bstr.sub t ~off:5 ~len:5 in
+  let cd = Bstr.sub t ~off:0 ~len:5 in
+  test (Bstr.overlap ab cd) None;
+  let ab = Bstr.sub t ~off:0 ~len:5 in
+  let cd = Bstr.sub t ~off:5 ~len:5 in
+  test (Bstr.overlap ab cd) None;
+  let ab = Bstr.sub t ~off:0 ~len:6 in
+  let cd = Bstr.sub t ~off:5 ~len:5 in
+  test (Bstr.overlap ab cd) (Some (1, 5, 0));
+  let ab = Bstr.sub t ~off:5 ~len:5 in
+  let cd = Bstr.sub t ~off:0 ~len:6 in
+  test (Bstr.overlap ab cd) (Some (1, 0, 5));
+  let ab = Bstr.sub t ~off:0 ~len:8 in
+  let cd = Bstr.sub t ~off:2 ~len:8 in
+  test (Bstr.overlap ab cd) (Some (6, 2, 0));
+  let ab = Bstr.sub t ~off:0 ~len:10 in
+  let cd = Bstr.sub t ~off:2 ~len:8 in
+  test (Bstr.overlap ab cd) (Some (8, 2, 0));
+  let ab = Bstr.sub t ~off:0 ~len:10 in
+  let cd = Bstr.sub t ~off:2 ~len:6 in
+  test (Bstr.overlap ab cd) (Some (6, 2, 0));
+  let ab = Bstr.sub t ~off:0 ~len:8 in
+  let cd = Bstr.sub t ~off:0 ~len:10 in
+  test (Bstr.overlap ab cd) (Some (8, 0, 0));
+  let ab = Bstr.sub t ~off:0 ~len:10 in
+  let cd = Bstr.sub t ~off:0 ~len:10 in
+  test (Bstr.overlap ab cd) (Some (10, 0, 0));
+  let ab = Bstr.sub t ~off:0 ~len:10 in
+  let cd = Bstr.sub t ~off:0 ~len:8 in
+  test (Bstr.overlap ab cd) (Some (8, 0, 0));
+  let ab = Bstr.sub t ~off:2 ~len:6 in
+  let cd = Bstr.sub t ~off:0 ~len:10 in
+  test (Bstr.overlap ab cd) (Some (6, 0, 2));
+  let ab = Bstr.sub t ~off:2 ~len:8 in
+  let cd = Bstr.sub t ~off:0 ~len:10 in
+  test (Bstr.overlap ab cd) (Some (8, 0, 2));
+  let ab = Bstr.sub t ~off:2 ~len:8 in
+  let cd = Bstr.sub t ~off:0 ~len:8 in
+  test (Bstr.overlap ab cd) (Some (6, 0, 2))
+
 let ( / ) = Filename.concat
 
 let () =
@@ -1130,7 +1180,7 @@ let () =
     ; test37; test38; test39; test40; test41; test42; test43; test44; test45
     ; test46; test47; test48; test49; test50; test51; test52; test53; test54
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
-    ; test64; test65; test66; test67; test68; test69
+    ; test64; test65; test66; test67; test68; test69; test70
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in
