@@ -46,6 +46,7 @@ and _ primary =
   | CString : string primary
   | Until : char -> string primary
   | Bstr : int -> Bstr.t primary
+  | Const : 'a -> 'a primary
 
 and _ a_case = C0 : 'a case0 -> 'a a_case | C1 : ('a, 'b) case1 -> 'a a_case
 
@@ -258,6 +259,7 @@ module Size = struct
     | Var_int -> sizer_varint
     | CString -> sizer_cstring
     | Until p -> sizer_until p
+    | Const _ -> Sizer.static 0
 
   and record : type a. a record -> a Sizer.t =
    fun r ->
@@ -487,6 +489,7 @@ module Bytes = struct
     | CString -> encode_cstring
     | Until _ -> encode_until
     | Bstr len -> encode_bstr len
+    | Const _ -> fun _v _bstr _off -> ()
 
   and record : type a. a record -> a encoder =
    fun r ->
@@ -624,6 +627,7 @@ module Bstr = struct
     | CString -> decode_cstring
     | Until p -> decode_until p
     | Bstr len -> decode_bstr len
+    | Const v -> fun _bstr _off -> v
 
   and map : type a b. (a, b) map -> b decoder =
    fun { x; f; _ } -> fun buf pos -> f (decode x buf pos)
@@ -766,6 +770,7 @@ module Bstr = struct
     | CString -> encode_cstring
     | Until _ -> encode_until
     | Bstr len -> encode_bstr len
+    | Const _ -> fun _v _bstr _off -> ()
 
   and record : type a. a record -> a encoder =
    fun r ->
@@ -794,6 +799,7 @@ let encode_bstr = Bstr.encode
 
 (* combinators *)
 
+let const v = Primary (Const v)
 let char = Primary Char
 let uint8 = Primary UInt8
 let int8 = Primary Int8

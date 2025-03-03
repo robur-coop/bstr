@@ -1,3 +1,73 @@
+(** [Bin] is a small library for encoding and decoding information from a buffer
+    (like a [bytes] or a [bigstring]). Unlike a {i parser combinator}, [Bin]
+    cannot decode a stream.
+
+    [Bin] can be used to project values coming from a pre-allocated buffer such
+    as a "framebuffer" (video, ethernet, etc.) or to inject values into it.
+    [Bin] can be seen as a library for describing (fairly basic) "C-like" types
+    of values that can be injected/projected into/from a particular memory area:
+
+    {[
+      #define PROPTAG_GET_COMMAND_LINE 0x00050001
+      #define VALUE_LENGTH_RESPONSE (1 << 31)
+
+      struct __attribute__((packed)) cmdline {
+        uint32_t id;
+        uint32_t value_len;
+        uint32_t param_len;
+        uint8    str[2048];
+      };
+
+      struct __attribute__((packed)) property_tag {
+        uint32_t id;
+        uint32_t value_len;
+        uint32_t param_len;
+      };
+
+      extern char _tags;
+
+      char *get_cmdline() {
+        struct cmdline p;
+        p.id = PROPTAG_GET_COMMAND_LINE;
+        p.value_len = len - sizeof(struct property_tag);
+        p.param_len = 2048 & ~VALUE_LENGTH_RESPONSE;
+        memcpy(&_tags, &p, sizeof(struct cmdline)); // inject
+        ...
+      }
+    ]}
+
+    [Bin] therefore allows you to describe a representation of a serialized
+    value in bytes and to associate with it a function that allows you to obtain
+    an OCaml value such as a record or a variant.
+
+    {[
+      open Bin
+
+      type cmdline = {
+          id: int32
+        ; value_len: int32
+        ; param_len: int32
+        ; cmdline: string
+      }
+
+      let cmdline =
+        record (fun id value_len param_len -> { id; value_len; param_len })
+        |+ field neint32 (Fun.const 0x00050001l)
+        |+ field neint32 (fun t -> t.value_len)
+        |+ field neint32 (fun t -> t.param_len)
+        |+ field cstring (fun t -> t.cmdline)
+        |> sealr
+
+      let encode_into tags ?(off = 0) value =
+        let off = ref off in
+        Bin.encode_bstr cmdline value tags off (* inject *)
+    ]}
+
+    Of course, it's not as fast as what we can do in C, but [Bin] has the
+    advantage of offering a small DSL that allows us to describe these types and
+    go directly to OCaml values, which is generally more pleasant to manipulate
+    with OCaml than to make C stubs. *)
+
 type 'a t
 
 (** {1:primitives Primitives.} *)
@@ -28,6 +98,7 @@ val bytes : int -> string t
 val bstr : int -> Bstr.t t
 val cstring : string t
 val until : char -> string t
+val const : 'a -> 'a t
 
 val map : 'b t -> ('b -> 'a) -> ('a -> 'b) -> 'a t
 (** This combinator allows defining a representative of one type in terms of
