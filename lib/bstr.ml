@@ -398,7 +398,9 @@ let sub_string bstr ~off ~len =
     invalid_arg "Bstr.sub_string";
   unsafe_sub_string bstr off len
 
-let to_string bstr = unsafe_sub_string bstr 0 (length bstr)
+let to_string bstr =
+  if length bstr <= 0 then "" else unsafe_sub_string bstr 0 (length bstr)
+
 let is_empty bstr = length bstr == 0
 
 let is_prefix ~affix bstr =

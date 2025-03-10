@@ -1168,6 +1168,47 @@ let test70 =
   let cd = Bstr.sub t ~off:0 ~len:8 in
   test (Bstr.overlap ab cd) (Some (6, 0, 2))
 
+let test71 =
+  let descr = {text|with_range|text} in
+  Test.test ~title:"with_range" ~descr @@ fun () ->
+  let base = Bstr.of_string "00abc1234" in
+  let abc = Bstr.sub ~off:2 ~len:3 base in
+  let a = Bstr.sub ~off:2 ~len:1 base in
+  let empty = Bstr.sub ~off:2 ~len:0 base in
+  let eq a b = check (Bstr.to_string a = Bstr.to_string b) in
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
+  eq (Bstr.with_range ~first:1 ~len:0 empty) Bstr.empty;
+  eq (Bstr.with_range ~first:1 ~len:0 empty) Bstr.empty;
+  eq (Bstr.with_range ~first:0 ~len:1 empty) Bstr.empty;
+  eq (Bstr.with_range ~first:(-1) ~len:1 empty) Bstr.empty;
+  lazy (Bstr.with_range ~first:0 ~len:(-1) empty) |> err;
+  eq (Bstr.with_range ~first:0 ~len:0 a) Bstr.empty;
+  eq (Bstr.with_range a ~first:1 ~len:0) Bstr.empty;
+  eq (Bstr.with_range a ~first:1 ~len:1) Bstr.empty;
+  eq (Bstr.with_range a ~first:(-1) ~len:1) Bstr.empty;
+  eq (Bstr.with_range ~first:1 abc) (Bstr.of_string "bc");
+  eq (Bstr.with_range ~first:2 abc) (Bstr.of_string "c");
+  eq (Bstr.with_range ~first:3 abc) Bstr.empty;
+  eq (Bstr.with_range ~first:4 abc) Bstr.empty;
+  eq (Bstr.with_range abc ~first:0 ~len:0) (Bstr.of_string "");
+  eq (Bstr.with_range abc ~first:0 ~len:1) (Bstr.of_string "a");
+  eq (Bstr.with_range abc ~first:0 ~len:2) (Bstr.of_string "ab");
+  eq (Bstr.with_range abc ~first:0 ~len:4) (Bstr.of_string "abc");
+  eq (Bstr.with_range abc ~first:1 ~len:0) (Bstr.of_string "");
+  eq (Bstr.with_range abc ~first:1 ~len:1) (Bstr.of_string "b");
+  eq (Bstr.with_range abc ~first:1 ~len:2) (Bstr.of_string "bc");
+  eq (Bstr.with_range abc ~first:1 ~len:3) (Bstr.of_string "bc");
+  eq (Bstr.with_range abc ~first:2 ~len:0) (Bstr.of_string "");
+  eq (Bstr.with_range abc ~first:2 ~len:1) (Bstr.of_string "c");
+  eq (Bstr.with_range abc ~first:2 ~len:2) (Bstr.of_string "c");
+  eq (Bstr.with_range abc ~first:3 ~len:0) (Bstr.of_string "");
+  eq (Bstr.with_range abc ~first:1 ~len:4) (Bstr.of_string "bc");
+  eq (Bstr.with_range abc ~first:(-1) ~len:1) Bstr.empty
+
 let ( / ) = Filename.concat
 
 let () =
@@ -1180,7 +1221,7 @@ let () =
     ; test37; test38; test39; test40; test41; test42; test43; test44; test45
     ; test46; test47; test48; test49; test50; test51; test52; test53; test54
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
-    ; test64; test65; test66; test67; test68; test69; test70
+    ; test64; test65; test66; test67; test68; test69; test70; test71
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in
