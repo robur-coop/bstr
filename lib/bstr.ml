@@ -46,9 +46,9 @@ let min (a : int) b = if a <= b then a else b [@@inline]
 module Bytes = struct
   include Bytes
 
-  external unsafe_get_uint8 : bytes -> int -> int = "%bytes_unsafe_get"
+  external _unsafe_get_uint8 : bytes -> int -> int = "%bytes_unsafe_get"
   external unsafe_set_uint8 : bytes -> int -> int -> unit = "%bytes_unsafe_set"
-  external unsafe_get_int32_ne : bytes -> int -> int32 = "%caml_bytes_get32u"
+  external _unsafe_get_int32_ne : bytes -> int -> int32 = "%caml_bytes_get32u"
 
   external unsafe_set_int32_ne : bytes -> int -> int32 -> unit
     = "%caml_bytes_set32u"
@@ -97,9 +97,19 @@ external unsafe_memcpy :
   = "bstr_bytecode_memcpy" "bstr_native_memcpy"
 [@@noalloc]
 
+external unsafe_memcpy_mmaped :
+  t -> (int[@untagged]) -> t -> (int[@untagged]) -> (int[@untagged]) -> unit
+  = "bstr_bytecode_memcpy" "bstr_native_memcpy_mmaped"
+[@@noalloc]
+
 external unsafe_memmove :
   t -> (int[@untagged]) -> t -> (int[@untagged]) -> (int[@untagged]) -> unit
   = "bstr_bytecode_memmove" "bstr_native_memmove"
+[@@noalloc]
+
+external unsafe_memmove_mmaped :
+  t -> (int[@untagged]) -> t -> (int[@untagged]) -> (int[@untagged]) -> unit
+  = "bstr_bytecode_memmove" "bstr_native_memmove_mmaped"
 [@@noalloc]
 
 external unsafe_memchr :
@@ -138,6 +148,16 @@ let memcpy src ~src_off dst ~dst_off ~len =
   then invalid_arg "Bstr.memcpy";
   unsafe_memcpy src src_off dst dst_off len
 
+let memcpy_mmaped src ~src_off dst ~dst_off ~len =
+  if
+    len < 0
+    || src_off < 0
+    || src_off > Bigarray.Array1.dim src - len
+    || dst_off < 0
+    || dst_off > Bigarray.Array1.dim dst - len
+  then invalid_arg "Bstr.memcpy";
+  unsafe_memcpy_mmaped src src_off dst dst_off len
+
 let memmove src ~src_off dst ~dst_off ~len =
   if
     len < 0
@@ -147,6 +167,16 @@ let memmove src ~src_off dst ~dst_off ~len =
     || dst_off > Bigarray.Array1.dim dst - len
   then invalid_arg "Bstr.memmove";
   unsafe_memmove src src_off dst dst_off len
+
+let memmove_mmaped src ~src_off dst ~dst_off ~len =
+  if
+    len < 0
+    || src_off < 0
+    || src_off > Bigarray.Array1.dim src - len
+    || dst_off < 0
+    || dst_off > Bigarray.Array1.dim dst - len
+  then invalid_arg "Bstr.memmove";
+  unsafe_memmove_mmaped src src_off dst dst_off len
 
 let memchr src ~off ~len value =
   if len < 0 || off < 0 || off > Bigarray.Array1.dim src - len then
@@ -331,19 +361,14 @@ let unsafe_blit_to_bytes bstr ~src_off dst ~dst_off ~len =
     Bytes.unsafe_set_uint8 dst (dst_off + i) v
   done
 
-let unsafe_blit_from_bytes src ~src_off bstr ~dst_off ~len =
-  let len0 = len land 3 in
-  let len1 = len lsr 2 in
-  for i = 0 to len1 - 1 do
-    let i = i * 4 in
-    let v = Bytes.unsafe_get_int32_ne src (src_off + i) in
-    unsafe_set_int32_ne bstr (dst_off + i) v
-  done;
-  for i = 0 to len0 - 1 do
-    let i = (len1 * 4) + i in
-    let v = Bytes.unsafe_get_uint8 src (src_off + i) in
-    unsafe_set_uint8 bstr (dst_off + i) v
-  done
+external unsafe_blit_from_bytes :
+     bytes
+  -> src_off:(int[@untagged])
+  -> t
+  -> dst_off:(int[@untagged])
+  -> len:(int[@untagged])
+  -> unit = "bstr_bytecode_unsafe_blit_bytes" "bstr_native_unsafe_blit_bytes"
+[@@noalloc]
 
 let blit_from_bytes src ~src_off bstr ~dst_off ~len =
   if
@@ -671,9 +696,9 @@ let cut ?(rev = false) ~sep bstr =
   match rev with true -> rcut ~sep bstr | false -> fcut ~sep bstr
 
 let shift bstr off =
-  if off > length bstr then invalid_arg "Bstr.shift";
+  if off > length bstr || off < 0 then invalid_arg "Bstr.shift";
   let len = length bstr - off in
-  Bigarray.Array1.sub bstr off len
+  unsafe_sub bstr off len
 
 let split_on_char sep bstr =
   let lst = ref [] in

@@ -13,6 +13,82 @@ more expensive.
 
 This set of libraries is a synthesis of [astring][astring] (which offers a range
 of useful functions as well as slice), [cstruct][cstruct] (which offers a
-similar API for bigstrings), [bigstringaf][bigstringaf] the standard OCaml
-library and [repr][repr] for decoding/encoding these values into OCaml
-records/variants.
+similar API for bigstrings), [bigstringaf][bigstringaf] (which offers some other
+useful functions), the standard OCaml library and [repr][repr] for
+decoding/encoding these values into OCaml records/variants.
+
+## About API
+
+Here is an overview of the functions offered by `bstr` compared to other
+libraries:
+
++-----------------+------+---------+-------------+
+|                 | bstr | cstruct | bigstringaf |
++-----------------+------+---------+-------------+
+|         overlap |   ✅ |      ❌ |          ❌ |
++-----------------+------+---------+-------------+
+|          memcpy |   ✅ |      ❌ |          ✅ |
++-----------------+------+---------+-------------+
+|         memmove |   ✅ |      ✅ |          ✅ |
++-----------------+------+---------+-------------+
+|        fast sub |   ✅ |      ❌ |          ❌ |
++-----------------+------+---------+-------------+
+|       fast blit |   ✅ |      ❌ |          ❌ |
++-----------------+------+---------+-------------+
+| release GC lock |   ✅ |      ❌ |          ❌ |
++-----------------+------+---------+-------------+
+
+### Fast `sub`
+
+`sub` is perhaps the most useful operation for a bigarray. In fact, unlike bytes
+and strings, sub offers a view (equivalent or smaller) of a bigarray without
+making a copy. If, for example, you need to decode[^1] a large sequence of bytes
+(without having the notion of a "stream"), it may be useful to use the `sub`
+operation to decode the information byte by byte and avoid copying throughout
+the decoding process.
+
+The implementation of `sub` proposed by `Bstr` is a little different from that
+of the standard OCaml library. In fact, it is specialized for a bigarray of
+dimension 1 containing bytes. In fact, the `Bigarray.Array1.sub` function is a
+little more generic and `Bstr` takes the opportunity to "specialize" the
+function according to our type.
+
+However, according to the representation proposed by `Cstruct`, `Cstruct.sub`
+remains **the fastest** operation compared to `Bstr` and `Bigstringaf`. If you
+want to have the same performance as `Cstruct`, the specialized `Slice` module
+for `Bstr.t` values is equivalent.
+
+### Fast `blit`
+
+`blit` from a string or a bytes is a little faster than `Bigstringaf` and
+`Cstruct`. The difference basically lies in the fact that `Bstr.t` uses other
+"tags" to describe the FFI with the C `memcpy` function (specifically the
+[\[@untagged\]][untagged] tag).
+
+#### _mmaped_ or not?
+
+There are several ways to copy bytes between two bigarrays:
+- the "mmaped" version
+- the simple version
+
+The first is quite specific because it releases the GC lock after a certain
+number of bytes have been copied. This can be advantageous if you want to make a
+large copy between two bigarrays in parallel in a `Thread`.
+
+If we specify _mmaped_, it is because the copy between two bigarrays, one of
+which may come from `Unix.map_file`, can also take time (and we may want to do
+it in parallel in a `Thread`) since it involves reading/writing on the disk.
+
+Finally, the simple version does not release the GC lock and only applies the
+desired function (`memmove` or `memcpy`).
+
+#### `memmove` or `memcpy`?
+
+`Bstr.blit` **always** uses the `memmove` function. However, it can be
+advantageous to use `memcpy` in a fairly specific case: when you know that the
+source refers to a memory area that is not shared with the destination.
+
+To find out, you can use the `Bstr.overlap` function, which checks whether or
+not the two bigarrays given have a common memory area.
+
+[^1]: `Bin` is currently being designed with this in mind.

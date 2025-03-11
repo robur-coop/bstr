@@ -1,0 +1,31 @@
+(executable
+ (name sub)
+ (libraries bstr cstruct bechamel bechamel-js))
+
+(rule
+ (targets sub.json)
+ (action
+  (with-stdout-to
+   %{targets}
+   (run ./sub.exe))))
+
+(rule
+ (targets sub.html)
+ (action
+  (system "%{bin:bechamel-html} < %{dep:sub.json} > %{targets}")))
+
+(executable
+ (name blit)
+ (libraries bstr cstruct bechamel bechamel-js))
+
+(rule
+ (targets blit.json)
+ (action
+  (with-stdout-to
+   %{targets}
+   (run ./blit.exe))))
+
+(rule
+ (targets blit.html)
+ (action
+  (system "%{bin:bechamel-html} < %{dep:blit.json} > %{targets}")))

@@ -106,6 +106,22 @@ val memcpy : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
       if [src_off] and [len] do not designate a valid range of [src], or if
       [dst_off] and [len] do not designate a valid range of [dst]. *)
 
+val memcpy_mmaped : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** [memcpy_mmaped] is like {!val:memcpy} but [src] and [dst] can be a
+    {i mmaped} bigarray (from [Unix.map_file]). In this specific case, copying
+    from one to the other can take some time because it involves reading/writing
+    to disk. The operation can take longer than if the two bigarrays were
+    allocated via [malloc()]/Bigarray.Array1.create.
+
+    It may therefore be worthwhile to release the GC lock so that this specific
+    operation can be carried out in parallel (in a [Thread]) without
+    interruption by the GC.
+
+    Note that the bigarrays do not necessarily need to be {i mmaped}. This
+    function also applies to "normal" bigarrays. It may also be worthwhile to
+    use this function if you know that you are copying a large area and would
+    like to do it in parallel (in a [Thread]). *)
+
 val memmove : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
 (** [memmove src ~src_off dst ~dst_off ~len] copies [len] bytes from [src] to
     [dst]. [src] and [dst] may overlap: copying takes place as though the bytes
@@ -115,6 +131,22 @@ val memmove : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
     @raise Invalid_argument
       if [src_off] and [len] do not designate a valid range of [src], or if
       [dst_off] and [len] do not designate a valid range of [dst]. *)
+
+val memmove_mmaped : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** [memmove_mmaped] is like {!val:memmove} but [src] and [dst] can be a
+    {i mmaped} bigarray (from [Unix.map_file]). In this specific case, copying
+    from one to the other can take some time because it involves reading/writing
+    to disk. The operation can take longer than if the two bigarrays were
+    allocated via [malloc()]/Bigarray.Array1.create.
+
+    It may therefore be worthwhile to release the GC lock so that this specific
+    operation can be carried out in parallel (in a [Thread]) without
+    interruption by the GC.
+
+    Note that the bigarrays do not necessarily need to be {i mmaped}. This
+    function also applies to "normal" bigarrays. It may also be worthwhile to
+    use this function if you know that you are copying a large area and would
+    like to do it in parallel (in a [Thread]). *)
 
 val memcmp : t -> src_off:int -> t -> dst_off:int -> len:int -> int
 (** [memcmp s1 ~src_off s2 ~dst_off ~len] compares the first [len] bytes of the
