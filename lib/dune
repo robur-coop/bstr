@@ -21,9 +21,16 @@
 
 (library
  (name slice_bytes)
- (modules slice_bytes)
+ (modules bytes_labels slice_bytes)
  (public_name slice.bytes)
  (libraries slice)
+ (wrapped false))
+
+(library
+ (name slice_bstr)
+ (modules slice_bstr)
+ (public_name slice.bstr)
+ (libraries bstr slice)
  (wrapped false))
 
 ; (rule
@@ -35,7 +42,7 @@
 (rule
  (target slice_bytes.ml)
  (action
-  (run ./../bin/generate.exe -m S -n Bytes -i %{dep:slice.ml.in} -o %{target})))
+  (run ./../bin/generate.exe -m S -n Bytes_labels -i %{dep:slice.ml.in} -o %{target})))
 
 (rule
  (target slice_bstr.ml)

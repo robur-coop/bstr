@@ -65,7 +65,7 @@ for `Bstr.t` values is equivalent.
 "tags" to describe the FFI with the C `memcpy` function (specifically the
 [\[@untagged\]][untagged] tag).
 
-#### _mmaped_ or not?
+#### _mmaped_ or not? (GC lock)
 
 There are several ways to copy bytes between two bigarrays:
 - the "mmaped" version

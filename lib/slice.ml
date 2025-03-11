@@ -2,14 +2,17 @@ type 'a t = { off: int; len: int; buf: 'a }
 
 let unsafe_make ~off ~len buf = { off; len; buf }
 
+let unsafe_sub ~off:off' ~len:len' { off; buf; _ } =
+  { off= off + off'; len= len'; buf }
+
 let pp ppf { off; len; _ } =
   Format.fprintf ppf "@[<hov>{ off=@ %d;@ len=@ %d;@ }@]" off len
 
 let length { len; _ } = len
 
-let sub { off; len; buf } ~off:off' ~len:len' =
+let sub ({ len; _ } as t) ~off:off' ~len:len' =
   if off' < 0 || len' < 0 || off' > len - len' then invalid_arg "Slice.sub";
-  { off= off + off'; len= len'; buf }
+  unsafe_sub ~off:off' ~len:len' t
 
 module type R = sig
   type t

@@ -142,14 +142,14 @@ __MEM1(memchr)
 
 void bstr_native_unsafe_blit_bytes(value src, intnat src_off, value dst,
                                    intnat dst_off, intnat len) {
-  memmove(bstr_uint8_off(dst, dst_off), bytes_uint8_off(src, src_off), len);
+  memcpy(bstr_uint8_off(dst, dst_off), bytes_uint8_off(src, src_off), len);
 }
 
 CAMLprim value bstr_bytecode_unsafe_blit_bytes(value src, intnat src_off,
                                                value dst, intnat dst_off,
                                                intnat len) {
   CAMLparam5(src, src_off, dst, dst_off, len);
-  memmove(bstr_uint8_off(dst, Unsigned_long_val(dst_off)),
+  memcpy(bstr_uint8_off(dst, Unsigned_long_val(dst_off)),
           bytes_uint8_off(src, Unsigned_long_val(src_off)),
           Unsigned_long_val(len));
   CAMLreturn(Val_unit);

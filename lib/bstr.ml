@@ -334,7 +334,7 @@ let sub bstr ~off ~len =
   if off < 0 || len < 0 || off > length bstr - len then invalid_arg "Bstr.sub";
   unsafe_sub bstr off len
 
-let unsafe_blit src ~src_off dst ~dst_off ~len =
+let[@inline always] unsafe_blit src ~src_off dst ~dst_off ~len =
   unsafe_memmove src src_off dst dst_off len
 
 let blit src ~src_off dst ~dst_off ~len =
