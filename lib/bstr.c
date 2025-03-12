@@ -35,8 +35,8 @@ intnat bstr_native_ptr(value va) {
 #define LEAVE_RUNTIME_OP_CUTOFF 4096
 #define is_mmaped(ba) ((ba)->flags & CAML_BA_MAPPED_FILE)
 
-void bstr_native_memcpy_mmaped(value src, intnat src_off, value dst, intnat dst_off,
-                        intnat len) {
+void bstr_native_memcpy_mmaped(value src, intnat src_off, value dst,
+                               intnat dst_off, intnat len) {
   int leave_runtime = (len > LEAVE_RUNTIME_OP_CUTOFF * sizeof(long));
 
   if (leave_runtime)
@@ -57,7 +57,8 @@ CAMLprim value bstr_bytecode_memcpy(value src, value src_off, value dst,
 
   if (is_mmaped(Caml_ba_array_val(src)) || is_mmaped(Caml_ba_array_val(dst)))
     bstr_native_memcpy_mmaped(src, Unsigned_long_val(src_off), dst,
-                       Unsigned_long_val(dst_off), Unsigned_long_val(len));
+                              Unsigned_long_val(dst_off),
+                              Unsigned_long_val(len));
   else
     bstr_native_memcpy(src, Unsigned_long_val(src_off), dst,
                        Unsigned_long_val(dst_off), Unsigned_long_val(len));
@@ -65,8 +66,8 @@ CAMLprim value bstr_bytecode_memcpy(value src, value src_off, value dst,
   CAMLreturn(Val_unit);
 }
 
-void bstr_native_memmove_mmaped(value src, intnat src_off, value dst, intnat dst_off,
-                         intnat len) {
+void bstr_native_memmove_mmaped(value src, intnat src_off, value dst,
+                                intnat dst_off, intnat len) {
   int leave_runtime = (len > LEAVE_RUNTIME_OP_CUTOFF * sizeof(long)) ||
                       is_mmaped(Caml_ba_array_val(src)) ||
                       is_mmaped(Caml_ba_array_val(dst));
@@ -94,7 +95,8 @@ CAMLprim value bstr_bytecode_memmove(value src, value src_off, value dst,
   CAMLparam5(src, src_off, dst, dst_off, len);
   if (is_mmaped(Caml_ba_array_val(src)) || is_mmaped(Caml_ba_array_val(dst)))
     bstr_native_memmove_mmaped(src, Unsigned_long_val(src_off), dst,
-                        Unsigned_long_val(dst_off), Unsigned_long_val(len));
+                               Unsigned_long_val(dst_off),
+                               Unsigned_long_val(len));
   else
     bstr_native_memmove(src, Unsigned_long_val(src_off), dst,
                         Unsigned_long_val(dst_off), Unsigned_long_val(len));
@@ -141,32 +143,32 @@ __MEM1(memset)
 __MEM1(memchr)
 
 void bstr_native_unsafe_blit_from_bytes(value src, intnat src_off, value dst,
-                                   intnat dst_off, intnat len) {
+                                        intnat dst_off, intnat len) {
   memcpy(bstr_uint8_off(dst, dst_off), bytes_uint8_off(src, src_off), len);
 }
 
 CAMLprim value bstr_bytecode_unsafe_blit_from_bytes(value src, intnat src_off,
-                                               value dst, intnat dst_off,
-                                               intnat len) {
+                                                    value dst, intnat dst_off,
+                                                    intnat len) {
   CAMLparam5(src, src_off, dst, dst_off, len);
-  memcpy(bytes_uint8_off(dst, Unsigned_long_val(dst_off)),
-          bstr_uint8_off(src, Unsigned_long_val(src_off)),
-          Unsigned_long_val(len));
+  memcpy(bstr_uint8_off(dst, Unsigned_long_val(dst_off)),
+         bytes_uint8_off(src, Unsigned_long_val(src_off)),
+         Unsigned_long_val(len));
   CAMLreturn(Val_unit);
 }
 
 void bstr_native_unsafe_blit_to_bytes(value src, intnat src_off, value dst,
-                                   intnat dst_off, intnat len) {
-  memcpy(bstr_uint8_off(dst, dst_off), bytes_uint8_off(src, src_off), len);
+                                      intnat dst_off, intnat len) {
+  memcpy(bytes_uint8_off(dst, dst_off), bstr_uint8_off(src, src_off), len);
 }
 
 CAMLprim value bstr_bytecode_unsafe_blit_to_bytes(value src, intnat src_off,
-                                               value dst, intnat dst_off,
-                                               intnat len) {
+                                                  value dst, intnat dst_off,
+                                                  intnat len) {
   CAMLparam5(src, src_off, dst, dst_off, len);
   memcpy(bytes_uint8_off(dst, Unsigned_long_val(dst_off)),
-          bstr_uint8_off(src, Unsigned_long_val(src_off)),
-          Unsigned_long_val(len));
+         bstr_uint8_off(src, Unsigned_long_val(src_off)),
+         Unsigned_long_val(len));
   CAMLreturn(Val_unit);
 }
 
