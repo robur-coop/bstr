@@ -62,3 +62,8 @@ let sub_string { Slice.buf; off; _ } ~off:off' ~len =
   let dst = Bytes.create len in
   S.blit_to_bytes buf ~src_off:(off + off') dst ~dst_off:0 ~len;
   Bytes.unsafe_to_string dst
+
+let to_string { Slice.buf; off= src_off; len } =
+  let dst = Bytes.create len in
+  S.blit_to_bytes buf ~src_off dst ~dst_off:0 ~len;
+  Bytes.unsafe_to_string dst

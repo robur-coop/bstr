@@ -155,3 +155,7 @@ val shift : t -> int -> t
 val sub_string : t -> off:int -> len:int -> string
 (** [sub_string slice ~off ~len] returns a string of length [len] containing the
     bytes of [slice] starting at [off]. *)
+
+val to_string : t -> string
+(** [to_string slice] is equivalent to
+    [sub_string slice ~off:0 ~len:(length slice)]. *)
