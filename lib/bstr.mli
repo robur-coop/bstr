@@ -416,7 +416,7 @@ val overlap : t -> t -> (int * int * int) option
 
 val sub_string : t -> off:int -> len:int -> string
 (** [sub_string bstr ~off ~len] returns a string of length [len] containing the
-    bytes of [t] starting at [off]. *)
+    bytes of [bstr] starting at [off]. *)
 
 val to_string : t -> string
 (** [to_string bstr] is equivalent to

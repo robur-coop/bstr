@@ -69,6 +69,68 @@ val get_int64_be : t -> int -> int64
 (** [get_int64_be slice i] is [slice]'s big-endian 64-bit integer starting at
     byte index [i]. *)
 
+val set : t -> int -> char -> unit
+(** [set t i chr] modifies [t] in place, replacing the byte at index [i] with
+    [chr].
+
+    @raise Invalid_argument if [i] is not a valid index in [t]. *)
+
+val set_int8 : t -> int -> int -> unit
+(** [set_int8 t i v] sets [t]'s signed 8-bit integer starting at byte index [i]
+    to [v]. *)
+
+val set_uint8 : t -> int -> int -> unit
+(** [set_uint8 t i v] sets [t]'s unsigned 8-bit integer starting at byte index
+    [i] to [v]. *)
+
+val set_uint16_ne : t -> int -> int -> unit
+(** [set_uint16_ne t i v] sets [t]'s native-endian unsigned 16-bit integer
+    starting at byte index [i] to [v]. *)
+
+val set_uint16_le : t -> int -> int -> unit
+(** [set_uint16_le t i v] sets [t]'s little-endian unsigned 16-bit integer
+    starting at byte index [i] to [v]. *)
+
+val set_uint16_be : t -> int -> int -> unit
+(** [set_uint16_le t i v] sets [t]'s big-endian unsigned 16-bit integer starting
+    at byte index [i] to [v]. *)
+
+val set_int16_ne : t -> int -> int -> unit
+(** [set_uint16_ne t i v] sets [t]'s native-endian signed 16-bit integer
+    starting at byte index [i] to [v]. *)
+
+val set_int16_le : t -> int -> int -> unit
+(** [set_uint16_le t i v] sets [t]'s little-endian signed 16-bit integer
+    starting at byte index [i] to [v]. *)
+
+val set_int16_be : t -> int -> int -> unit
+(** [set_uint16_le t i v] sets [t]'s big-endian signed 16-bit integer starting
+    at byte index [i] to [v]. *)
+
+val set_int32_ne : t -> int -> int32 -> unit
+(** [set_int32_ne t i v] sets [t]'s native-endian 32-bit integer starting at
+    byte index [i] to [v]. *)
+
+val set_int32_le : t -> int -> int32 -> unit
+(** [set_int32_ne t i v] sets [t]'s little-endian 32-bit integer starting at
+    byte index [i] to [v]. *)
+
+val set_int32_be : t -> int -> int32 -> unit
+(** [set_int32_ne t i v] sets [t]'s big-endian 32-bit integer starting at byte
+    index [i] to [v]. *)
+
+val set_int64_ne : t -> int -> int64 -> unit
+(** [set_int32_ne t i v] sets [t]'s native-endian 64-bit integer starting at
+    byte index [i] to [v]. *)
+
+val set_int64_le : t -> int -> int64 -> unit
+(** [set_int32_ne t i v] sets [t]'s little-endian 64-bit integer starting at
+    byte index [i] to [v]. *)
+
+val set_int64_be : t -> int -> int64 -> unit
+(** [set_int32_ne t i v] sets [t]'s big-endian 64-bit integer starting at byte
+    index [i] to [v]. *)
+
 val blit : t -> t -> unit
 (** [blit src dst] copies all bytes of [src] into [dst]. *)
 
@@ -85,3 +147,11 @@ val sub : t -> off:int -> len:int -> t
 
     {b Note} that this does not allocate a new buffer, but instead shares the
     buffer of [t.buf] with the newly-returned slice. *)
+
+val shift : t -> int -> t
+(** [shift slice n] is [sub slice n (length slice - n)] (see {!val:sub} for more
+    details). *)
+
+val sub_string : t -> off:int -> len:int -> string
+(** [sub_string slice ~off ~len] returns a string of length [len] containing the
+    bytes of [slice] starting at [off]. *)

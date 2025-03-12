@@ -29,6 +29,21 @@ let get_int32_be { off; buf; _ } idx = S.get_int32_be buf (off + idx)
 let get_int64_ne { off; buf; _ } idx = S.get_int64_ne buf (off + idx)
 let get_int64_le { off; buf; _ } idx = S.get_int64_le buf (off + idx)
 let get_int64_be { off; buf; _ } idx = S.get_int64_be buf (off + idx)
+let set { off; buf; _ } idx v = S.set buf (off + idx) v
+let set_int8 { off; buf; _ } idx v = S.set_int8 buf (off + idx) v
+let set_uint8 { off; buf; _ } idx v = S.set_uint8 buf (off + idx) v
+let set_uint16_ne { off; buf; _ } idx v = S.set_uint16_ne buf (off + idx) v
+let set_uint16_le { off; buf; _ } idx v = S.set_uint16_le buf (off + idx) v
+let set_uint16_be { off; buf; _ } idx v = S.set_uint16_be buf (off + idx) v
+let set_int16_ne { off; buf; _ } idx v = S.set_int16_ne buf (off + idx) v
+let set_int16_le { off; buf; _ } idx v = S.set_int16_ne buf (off + idx) v
+let set_int16_be { off; buf; _ } idx v = S.set_int16_be buf (off + idx) v
+let set_int32_ne { off; buf; _ } idx v = S.set_int32_ne buf (off + idx) v
+let set_int32_le { off; buf; _ } idx v = S.set_int32_le buf (off + idx) v
+let set_int32_be { off; buf; _ } idx v = S.set_int32_be buf (off + idx) v
+let set_int64_ne { off; buf; _ } idx v = S.set_int64_ne buf (off + idx) v
+let set_int64_le { off; buf; _ } idx v = S.set_int64_le buf (off + idx) v
+let set_int64_be { off; buf; _ } idx v = S.set_int64_be buf (off + idx) v
 
 let blit a b =
   let len = Int.min a.len b.len in
@@ -41,3 +56,9 @@ let fill { off; len; buf; } ?off:(off'= 0) ?len:len' chr =
   S.fill buf ~off:(off + off') ~len:len' chr
 
 let sub t ~off ~len = Slice.sub t ~off ~len
+let shift t n = Slice.shift t n
+
+let sub_string { Slice.buf; off; _ } ~off:off' ~len =
+  let dst = Bytes.create len in
+  S.blit_to_bytes buf ~src_off:(off + off') dst ~dst_off:0 ~len;
+  Bytes.unsafe_to_string dst

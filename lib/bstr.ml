@@ -47,10 +47,10 @@ module Bytes = struct
   include Bytes
 
   external _unsafe_get_uint8 : bytes -> int -> int = "%bytes_unsafe_get"
-  external unsafe_set_uint8 : bytes -> int -> int -> unit = "%bytes_unsafe_set"
+  external _unsafe_set_uint8 : bytes -> int -> int -> unit = "%bytes_unsafe_set"
   external _unsafe_get_int32_ne : bytes -> int -> int32 = "%caml_bytes_get32u"
 
-  external unsafe_set_int32_ne : bytes -> int -> int32 -> unit
+  external _unsafe_set_int32_ne : bytes -> int -> int32 -> unit
     = "%caml_bytes_set32u"
 end
 
@@ -347,19 +347,15 @@ let blit src ~src_off dst ~dst_off ~len =
   then invalid_arg "Bstr.blit";
   unsafe_blit src ~src_off dst ~dst_off ~len
 
-let unsafe_blit_to_bytes bstr ~src_off dst ~dst_off ~len =
-  let len0 = len land 3 in
-  let len1 = len lsr 2 in
-  for i = 0 to len1 - 1 do
-    let i = i * 4 in
-    let v = unsafe_get_int32_ne bstr (src_off + i) in
-    Bytes.unsafe_set_int32_ne dst (dst_off + i) v
-  done;
-  for i = 0 to len0 - 1 do
-    let i = (len1 * 4) + i in
-    let v = unsafe_get_uint8 bstr (src_off + i) in
-    Bytes.unsafe_set_uint8 dst (dst_off + i) v
-  done
+external unsafe_blit_to_bytes :
+     t
+  -> src_off:(int[@untagged])
+  -> bytes
+  -> dst_off:(int[@untagged])
+  -> len:(int[@untagged])
+  -> unit
+  = "bstr_bytecode_unsafe_blit_to_bytes" "bstr_native_unsafe_blit_to_bytes"
+[@@noalloc]
 
 external unsafe_blit_from_bytes :
      bytes
@@ -367,7 +363,8 @@ external unsafe_blit_from_bytes :
   -> t
   -> dst_off:(int[@untagged])
   -> len:(int[@untagged])
-  -> unit = "bstr_bytecode_unsafe_blit_bytes" "bstr_native_unsafe_blit_bytes"
+  -> unit
+  = "bstr_bytecode_unsafe_blit_from_bytes" "bstr_native_unsafe_blit_from_bytes"
 [@@noalloc]
 
 let blit_from_bytes src ~src_off bstr ~dst_off ~len =

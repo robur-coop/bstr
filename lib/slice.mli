@@ -4,6 +4,7 @@ val unsafe_make : off:int -> len:int -> 'buf -> 'buf t
 val pp : Format.formatter -> 'a t -> unit
 val length : 'a t -> int
 val sub : 'a t -> off:int -> len:int -> 'a t
+val shift : 'a t -> int -> 'a t
 
 module type R = sig
   type t

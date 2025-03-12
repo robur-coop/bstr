@@ -1,6 +1,6 @@
 (executable
  (name sub)
- (libraries bstr cstruct bechamel bechamel-js))
+ (libraries slice.bstr bstr cstruct bechamel bechamel-js))
 
 (rule
  (targets sub.json)
