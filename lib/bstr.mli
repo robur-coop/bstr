@@ -11,9 +11,8 @@
     bytes, bigstrings are allocated via [malloc()] or are available via
     [Unix.map_file].
 
-    They therefore exist outside the space normally allocated for OCaml with
-    regard to all its values. So there are some particularities to the use of
-    bigstrings.
+    They therefore exist outside the space normally allocated for OCaml values.
+    So there are some particularities to the use of bigstrings.
 
     The first thing to understand about bigstrings is that allocating them can
     take time. Since a bigstring is obtained either by [malloc()] or by
@@ -41,8 +40,8 @@
     One example is to "release" the GC lock when performing a calculation such
     as a hash or checksum on a bigarray. Since the latter will not be moved by
     the GC, if the elements required for the calculation are pre-allocated on
-    the C stack, it is possible to perform such a calculation on a Thread other
-    than the main OCaml thread.
+    the C stack, it is possible to perform such a calculation on a [Thread]
+    other than the main OCaml thread.
 
     - it may be necessary, in system programming, to write to a particular
       address in order to interact with a device. In this case, the bigstring
@@ -56,8 +55,8 @@
     prepare bigstrings according to the devices available.
 
     A final feature of bigstring is that it can be seen as a slice. You can have
-    another view of a bigstring that would be equally smaller. For example, the
-    {!val:sub} operation in particular {b doesn't copy} your bigstring, but
+    another view of a bigstring that would be equally or smaller. For example,
+    the {!val:sub} operation in particular {b doesn't copy} your bigstring, but
     offers you a "proxy" accessing the same memory area as the original
     bigstring.
 
@@ -65,7 +64,7 @@
     integers, without copying parts or all of the bigstring. For example, for a
     TCP/IP packet, we'd like to decode certain information but also give a slice
     of the bigstring that corresponds to the packet's payload (so that we can
-    process this payload without having to copy).
+    process this payload later without having to copy).
 
     Finally, it may be interesting in an encoder of some kind to give bigstrings
     that the user can write to, and check that these bigstrings are part of a

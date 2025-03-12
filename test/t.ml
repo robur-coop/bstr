@@ -1209,6 +1209,47 @@ let test71 =
   eq (Bstr.with_range abc ~first:1 ~len:4) (Bstr.of_string "bc");
   eq (Bstr.with_range abc ~first:(-1) ~len:1) Bstr.empty
 
+let test72 =
+  let descr = {text|blit & fill|text} in
+  Test.test ~title:"blit & fill" ~descr @@ fun () ->
+  let test str off flen v =
+    let len = String.length str in
+    let a = Bstr.of_string str in
+    let b = Bstr.create len in
+    let c = Bstr.create len in
+    Bstr.memmove a ~src_off:0 b ~dst_off:0 ~len;
+    Bstr.memcpy b ~src_off:0 c ~dst_off:0 ~len;
+    Bstr.fill c ~off ~len:flen v;
+    let rec verify idx =
+      if idx >= len then true
+      else
+        let expected =
+          if idx >= off && idx < off + flen then v else str.[idx]
+        in
+        c.{idx} == expected && verify (idx + 1)
+    in
+    check (Bstr.equal a b && verify 0)
+  in
+  test "\x01\x02\x05\x08\x9c\x7f" 3 2 '\x07';
+  test "\x01\x02\x05\x08\x9c\xd4" 3 2 '\x07';
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
+  let a = Bstr.of_string "foobarfoo" in
+  let b = Bstr.create 0 in
+  lazy (Bstr.memmove a ~src_off:0 b ~dst_off:0 ~len:1) |> err;
+  lazy (Bstr.memmove a ~src_off:0 b ~dst_off:(-1) ~len:0) |> err;
+  lazy (Bstr.memmove a ~src_off:10 b ~dst_off:0 ~len:0) |> err;
+  lazy (Bstr.memmove a ~src_off:(-1) b ~dst_off:0 ~len:0) |> err;
+  lazy (Bstr.memmove a ~src_off:0 b ~dst_off:0 ~len:(-1)) |> err;
+  lazy (Bstr.memcpy a ~src_off:0 b ~dst_off:0 ~len:1) |> err;
+  lazy (Bstr.memcpy a ~src_off:0 b ~dst_off:(-1) ~len:0) |> err;
+  lazy (Bstr.memcpy a ~src_off:10 b ~dst_off:0 ~len:0) |> err;
+  lazy (Bstr.memcpy a ~src_off:(-1) b ~dst_off:0 ~len:0) |> err;
+  lazy (Bstr.memcpy a ~src_off:0 b ~dst_off:0 ~len:(-1)) |> err
+
 let ( / ) = Filename.concat
 
 let () =
@@ -1221,7 +1262,7 @@ let () =
     ; test37; test38; test39; test40; test41; test42; test43; test44; test45
     ; test46; test47; test48; test49; test50; test51; test52; test53; test54
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
-    ; test64; test65; test66; test67; test68; test69; test70; test71
+    ; test64; test65; test66; test67; test68; test69; test70; test71; test72
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in

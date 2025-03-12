@@ -42,7 +42,8 @@
 (rule
  (target slice_bytes.ml)
  (action
-  (run ./../bin/generate.exe -m S -n Bytes_labels -i %{dep:slice.ml.in} -o %{target})))
+  (run ./../bin/generate.exe -m S -n Bytes_labels -i %{dep:slice.ml.in} -o
+    %{target})))
 
 (rule
  (target slice_bstr.ml)

@@ -1,12 +1,43 @@
+type t = S.t Slice.t
+
 open Slice
+
+let make ?(off= 0) ?len buf =
+  let len = match len with
+    | Some len -> len
+    | None -> S.length buf - off in
+  if len < 0
+  || off < 0
+  || off > S.length buf - len
+  then invalid_arg "Slice.make";
+  Slice.unsafe_make ~off ~len buf
 
 let empty = unsafe_make ~off:0 ~len:0 S.empty
 let length { len; _ } = len
 let get { off; buf; _ } idx = S.get buf (off + idx)
+let get_int8 { off; buf; _ } idx = S.get_int8 buf (off + idx)
+let get_uint8 { off; buf; _ } idx = S.get_uint8 buf (off + idx)
+let get_uint16_ne { off; buf; _ } idx = S.get_uint16_ne buf (off + idx)
+let get_uint16_le { off; buf; _ } idx = S.get_uint16_le buf (off + idx)
+let get_uint16_be { off; buf; _ } idx = S.get_uint16_be buf (off + idx)
+let get_int16_ne { off; buf; _ } idx = S.get_int16_ne buf (off + idx)
+let get_int16_le { off; buf; _ } idx = S.get_int16_ne buf (off + idx)
+let get_int16_be { off; buf; _ } idx = S.get_int16_be buf (off + idx)
+let get_int32_ne { off; buf; _ } idx = S.get_int32_ne buf (off + idx)
+let get_int32_le { off; buf; _ } idx = S.get_int32_le buf (off + idx)
+let get_int32_be { off; buf; _ } idx = S.get_int32_be buf (off + idx)
+let get_int64_ne { off; buf; _ } idx = S.get_int64_ne buf (off + idx)
+let get_int64_le { off; buf; _ } idx = S.get_int64_le buf (off + idx)
+let get_int64_be { off; buf; _ } idx = S.get_int64_be buf (off + idx)
 
 let blit a b =
   let len = Int.min a.len b.len in
   S.blit a.buf ~src_off:a.off b.buf ~dst_off:b.off ~len:len
 
-let fill { off; buf; _ } off' len' chr =
+let fill { off; len; buf; } ?off:(off'= 0) ?len:len' chr =
+  let len' = match len' with
+    | Some len' -> len'
+    | None -> len - off' in
   S.fill buf ~off:(off + off') ~len:len' chr
+
+let sub t ~off ~len = Slice.sub t ~off ~len

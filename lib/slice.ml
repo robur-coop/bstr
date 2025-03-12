@@ -10,8 +10,10 @@ let pp ppf { off; len; _ } =
 
 let length { len; _ } = len
 
-let sub ({ len; _ } as t) ~off:off' ~len:len' =
-  if off' < 0 || len' < 0 || off' > len - len' then invalid_arg "Slice.sub";
+let sub ({ off; len; _ } as t) ~off:off' ~len:len' =
+  let off'' = off + off' in
+  let top = off'' + len' and old = off + len in
+  if off'' <= off || top >= old || off'' >= top then invalid_arg "Slice.sub";
   unsafe_sub ~off:off' ~len:len' t
 
 module type R = sig
