@@ -1,4 +1,4 @@
-type 'buf t = private { off: int; len: int; buf: 'buf }
+type 'buf t = private { buf: 'buf; off: int; len: int; }
 
 val unsafe_make : off:int -> len:int -> 'buf -> 'buf t
 val pp : Format.formatter -> 'a t -> unit

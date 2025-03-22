@@ -3,7 +3,7 @@ open Toolkit
 
 let cs = Cstruct.create 32
 let bstr = Bstr.create 32
-let slice = Slice_bstr.make bstr
+let slice : Slice_bstr.t = Slice_bstr.make bstr
 let cstruct_sub () = Cstruct.sub cs 8 8
 let bstr_sub () = Bstr.sub bstr ~off:8 ~len:8
 let bigstringaf_sub () = Bigstringaf.sub bstr ~off:8 ~len:8
