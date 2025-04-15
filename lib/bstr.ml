@@ -41,7 +41,6 @@ let ( > ) (x : int) y = x > y [@@inline]
 external ( >= ) : 'a -> 'a -> bool = "%greaterequal"
 
 let ( >= ) (x : int) y = x >= y [@@inline]
-let min (a : int) b = if a <= b then a else b [@@inline]
 
 module Bytes = struct
   include Bytes
@@ -58,20 +57,18 @@ external swap16 : int -> int = "%bswap16"
 external swap32 : int32 -> int32 = "%bswap_int32"
 external swap64 : int64 -> int64 = "%bswap_int64"
 external get_uint8 : t -> int -> int = "%caml_ba_ref_1"
+external unsafe_get_uint8 : t -> int -> int = "%caml_ba_unsafe_ref_1"
 external set_uint8 : t -> int -> int -> unit = "%caml_ba_set_1"
 external get_uint16_ne : t -> int -> int = "%caml_bigstring_get16"
 external set_int16_ne : t -> int -> int -> unit = "%caml_bigstring_set16"
 external get_int32_ne : t -> int -> int32 = "%caml_bigstring_get32"
 external set_int32_ne : t -> int -> int32 -> unit = "%caml_bigstring_set32"
 external set_int64_ne : t -> int -> int64 -> unit = "%caml_bigstring_set64"
-external unsafe_get_uint8 : t -> int -> int = "%caml_ba_unsafe_ref_1"
 external unsafe_set_uint8 : t -> int -> int -> unit = "%caml_ba_unsafe_set_1"
 external unsafe_get_uint16_ne : t -> int -> int = "%caml_bigstring_get16u"
 
 external unsafe_set_uint16_ne : t -> int -> int -> unit
   = "%caml_bigstring_set16u"
-
-external unsafe_get_int32_ne : t -> int -> int32 = "%caml_bigstring_get32u"
 
 external unsafe_set_int32_ne : t -> int -> int32 -> unit
   = "%caml_bigstring_set32u"
@@ -514,24 +511,29 @@ let exists sat bstr =
     false
   with Break -> true
 
-let equal a b =
-  if length a == length b then
-    try
-      let len = length a in
-      let len0 = len land 3 in
-      let len1 = len lsr 2 in
-      for i = 0 to len1 - 1 do
-        let i = i * 4 in
-        if unsafe_get_int32_ne a i <> unsafe_get_int32_ne b i then
-          raise_notrace Break
-      done;
-      for i = 0 to len0 - 1 do
-        let i = (len1 * 4) + i in
-        if unsafe_get_uint8 a i != unsafe_get_uint8 b i then raise_notrace Break
-      done;
-      true
-    with Break -> false
-  else false
+let compare a b =
+  let len_a = length a and len_b = length b in
+  let len = if len_a < len_b then len_a else len_b in
+  unsafe_memcmp a 0 b 0 len
+
+let equal a b = compare a b == 0
+
+let constant_equal ~len a b =
+  let len1 = len asr 1 in
+  let r = ref 0 in
+  for i = 0 to pred len1 do
+    r :=
+      !r lor (unsafe_get_uint16_ne a (i * 2) lxor unsafe_get_uint16_ne b (i * 2))
+  done;
+  for _ = 1 to len land 1 do
+    r := !r lor (unsafe_get_uint8 a (len - 1) lxor unsafe_get_uint8 b (len - 1))
+  done;
+  !r == 0
+
+let constant_equal a b =
+  let al = length a in
+  let bl = length b in
+  if al != bl then false else constant_equal ~len:al a b
 
 let with_range ?(first = 0) ?(len = max_int) bstr =
   if len < 0 then invalid_arg "Bstr.with_range";

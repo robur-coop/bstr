@@ -1,4 +1,4 @@
-type 'a t = { buf: 'a; off: int; len: int; }
+type 'a t = { buf: 'a; off: int; len: int }
 
 let unsafe_make ~off ~len buf = { off; len; buf }
 let unsafe_sub { off; buf; _ } off' len' = { off= off + off'; len= len'; buf }
@@ -13,8 +13,7 @@ let sub t ~off ~len =
   let off' = t.off + off in
   let top = off' + len in
   let old = t.off + t.len in
-  if off' >= t.off && top <= old && off' <= top then
-    { t with off= off'; len }
+  if off' >= t.off && top <= old && off' <= top then { t with off= off'; len }
   else invalid_arg "Slice.sub"
 
 let shift t off =

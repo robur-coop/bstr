@@ -22,14 +22,14 @@ decoding/encoding these values into OCaml records/variants.
 Here is an overview of the functions offered by `bstr` compared to other
 libraries:
 
-|                 | bstr | cstruct | bigstringaf |
-|-----------------|------|---------|-------------|
-|         overlap |   ✅ |      ❌ |          ❌ |
-|          memcpy |   ✅ |      ❌ |          ✅ |
-|         memmove |   ✅ |      ✅ |          ✅ |
-|        fast sub |   ✅ |      ❌ |          ❌ |
-|       fast blit |   ✅ |      ❌ |          ❌ |
-| release GC lock |   ✅ |      ❌ |          ❌ |
+|                 | bstr | cstruct | bigstringaf | slice.bstr |
+|-----------------|------|---------|-------------|------------|
+|         overlap |   ✅ |      ❌ |          ❌ |         ✅ |
+|          memcpy |   ✅ |      ❌ |          ✅ |         ✅ |
+|         memmove |   ✅ |      ✅ |          ✅ |         ✅ |
+|        fast sub |   ❌ |      ❌ |          ❌ |         ✅ |
+|       fast blit |   ✅ |      ❌ |          ❌ |         ✅ |
+| release GC lock |   ✅ |      ❌ |          ❌ |         ✅ |
 
 ### Fast `sub`
 

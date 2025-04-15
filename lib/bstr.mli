@@ -1,8 +1,8 @@
 (** A small library for manipulating bigstrings.
 
     A bigstring is a mutable data structure that contains a fixed-length
-    sequence of bytes. Each byte can be indexed in constant time for reading
-    and writing.
+    sequence of bytes. Each byte can be indexed in constant time for reading and
+    writing.
 
     Given a byte sequence [bstr] of length [len], we can access each of the
     [len] bytes of [bstr] via its index in the sequence. Indexes start at [0],
@@ -65,96 +65,17 @@
     special features of bigstrings can unlock opportunities to outperform byte
     calculations or analysis.
 
-    {2:sub Sub-bigstrings.}
+    {2:sub Bigstring and slice.}
 
-    To clarify the use of bigstrings in OCaml, we advise you to read the
-    overview of bigstrings and the difference with bytes. After this theoretical
-    reading, this module offers a whole host of useful functions for
-    manipulating bigstrings.
+    Another advantage of bigstrings is that copying is avoided when extracting
+    part of a larger bigstring. This is because the {!val:sub} function returns
+    a "proxy" of the original bigstring.
 
-    {1:overview Overview.}
-
-    A bigstring is a special kind of memory area in the OCaml world. Unlike
-    bytes, bigstrings are allocated via [malloc()] or are available via
-    [Unix.map_file].
-
-    They therefore exist outside the space normally allocated for OCaml values.
-    So there are some particularities to the use of bigstrings.
-
-    The first thing to understand about bigstrings is that allocating them can
-    take time. Since a bigstring is obtained either by [malloc()] or by
-    [Unix.map_file], the former is a performance hit on the [malloc()] used
-    (which also depends on the fragmentation of the C heap) and the latter is a
-    system call that can interact with your file system.
-
-    By way of comparison, a byte of less than 2048 bytes requires only 3
-    processor instructions to exist and be available — beyond that, the bytes is
-    allocated in the major heap.
-
-    It is therefore advisable to allocate just a few bigstrings and reuse them
-    throughout your application. It's even advisable to allocate large
-    bigstrings.
-
-    A particularity of bigstrings is that they cannot be moved by the Garbage
-    Collector. Existing in a space other than that of OCaml (the C heap), they
-    don't move. With this advantage in mind, we can imagine several situations
-    where we'd like a memory zone that doesn't move:
-    - a bigstring can be manipulated by several threads/domains. Of course,
-      parallel accesses must be protected, but you can be sure that the
-      bigstring will not move throughout the process. Thus, its location in
-      memory can be shared by several threads/domains.
-
-    One example is to "release" the GC lock when performing a calculation such
-    as a hash or checksum on a bigarray. Since the latter will not be moved by
-    the GC, if the elements required for the calculation are pre-allocated on
-    the C stack, it is possible to perform such a calculation on a [Thread]
-    other than the main OCaml thread.
-
-    - it may be necessary, in system programming, to write to a particular
-      address in order to interact with a device. In this case, the bigstring
-      can be found as an OCaml value bridging a special memory area (such as the
-      framebuffer). [Unix.map_file] is an example of this, offering a bigarray
-      derived from the result of [mmap(3P)].
-
-    This address can be related (via the kernel) to an area on your hard disk
-    that corresponds to a file. In the case of unikernels or embedded systems,
-    it's quite common to prepare bigstrings according to the devices available.
-
-    A final feature of bigstring is that it can be seen as a slice. You can have
-    another view of a bigstring that would be equally or smaller. For example,
-    the {!val:sub} operation in particular {b doesn't copy} your bigstring, but
-    offers you a "proxy" accessing the same memory area as the original
-    bigstring.
-
-    This can be useful for decoding packets, extracting information such as
-    integers, without copying parts or all of the bigstring. For example, for a
-    TCP/IP packet, we'd like to decode certain information but also give a slice
-    of the bigstring that corresponds to the packet's {i payload} (so that we
-    can process this payload later without having to copy).
-
-    Finally, it may be interesting in an encoder of some kind to give bigstrings
-    that the user can write to, and check that these bigstrings are part of a
-    larger bigstring (in other words, these bigstrings come from a {!val:sub} of
-    a larger bigstring) that has been allocated beforehand.
-
-    Bigstrings therefore have certain advantages over bytes, but also some
-    disadvantages. Considering the former as elements you should use
-    systematically is not a good choice. However, we are sometimes forced to use
-    them (especially when communicating with embedded devices) and they can be
-    interesting for certain types of applications. This overview presents a few
-    cases, but examples exist in the OCaml community where the use of bigstrings
-    is justified.
-
-    In short, this library attempts to summarize everything that can be done
-    with bigstrings.
-
-    {2 Performance.}
-
-    {1:pkt Encode & Decode packets.}
-
-    In order to encode or decode packets (such as ARP or DNS packets), Bstr
-    offers a small API for converting a slice of bytes from a {!val:Bstr.t} to a
-    user-defined variant or record. *)
+    In this respect, and to be very precise, {!val:sub} avoids copying but the
+    creation of this "proxy" {b remains} costly. In addition, this library is
+    distributed with a new {!module:Slice_bstr} module. The latter offers a new
+    type whose {!val:Slice_bstr.sub} function is much less costly than
+    {!val:sub}. *)
 
 type t = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
 
@@ -530,6 +451,15 @@ val exists : (char -> bool) -> t -> bool
 val equal : t -> t -> bool
 (** [equal a b] is [a = b]. *)
 
+val constant_equal : t -> t -> bool
+(** [constant_equal] gives the same result as {!val:equal} but the execution
+    time of the function, whether or not the two values are equivalent (as long
+    as they have the {b same} size) is the same.
+
+    Indeed, the {!val:equal} function ends as soon as a difference exists. This
+    function continues even if a difference exists. This function is useful when
+    comparing passwords — and avoiding an {i timing attack}. *)
+
 val with_range : ?first:int -> ?len:int -> t -> t
 (** [with_range ~first ~len bstr] are the consecutive bytes of [bstr] whose
     indices exist in the range \[[first];[first + len - 1]\].
@@ -634,7 +564,8 @@ val to_seq : t -> char Seq.t
     bigstring during iteration will be reflected in the sequence. *)
 
 val to_seqi : t -> (int * char) Seq.t
-(** Iterate on the bigstring, in increasing order, yielding indices along chars. *)
+(** Iterate on the bigstring, in increasing order, yielding indices along chars.
+*)
 
 val of_seq : char Seq.t -> t
 (** Create a bigstring from the generator. *)

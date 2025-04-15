@@ -29,3 +29,19 @@
  (targets blit.html)
  (action
   (system "%{bin:bechamel-html} < %{dep:blit.json} > %{targets}")))
+
+(executable
+ (name equal)
+ (libraries base64 slice.bstr bstr cstruct bechamel bechamel-js))
+
+(rule
+ (targets equal.json)
+ (action
+  (with-stdout-to
+   %{targets}
+   (run ./equal.exe))))
+
+(rule
+ (targets equal.html)
+ (action
+  (system "%{bin:bechamel-html} < %{dep:equal.json} > %{targets}")))

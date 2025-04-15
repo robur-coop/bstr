@@ -172,3 +172,8 @@ val string : ?off:int -> ?len:int -> string -> t
     [off] (defaults to [0]) and stops at position [off + len] (defaults to
     [String.length str]). [str] is fully-replaced by a fresh allocated
     {!type:t}. *)
+
+val overlap : t -> t -> (int * int * int) option
+(** [overlap x y] returns the size (in bytes) of what is physically common
+    between [x] and [y], as well as the position of [y] in [x] and the position
+    of [x] in [y]. *)

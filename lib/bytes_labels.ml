@@ -16,3 +16,5 @@ let string ?(off = 0) ?len str =
     invalid_arg "Bytes.string";
   let buf = String.sub str off len in
   Bytes.unsafe_of_string buf
+
+let overlap a b = if a == b then Some (Bytes.length a, 0, 0) else None

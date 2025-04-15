@@ -33,12 +33,6 @@
  (libraries bstr slice)
  (wrapped false))
 
-; (rule
-;  (target slice_string.ml)
-;  (action
-;   (run ./../bin/generate.exe -m S -n String -i %{dep:slice.ml.in} -o
-;     %{target})))
-
 (rule
  (target slice_bytes.ml)
  (action

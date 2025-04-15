@@ -1248,7 +1248,9 @@ let test72 =
   lazy (Bstr.memcpy a ~src_off:0 b ~dst_off:(-1) ~len:0) |> err;
   lazy (Bstr.memcpy a ~src_off:10 b ~dst_off:0 ~len:0) |> err;
   lazy (Bstr.memcpy a ~src_off:(-1) b ~dst_off:0 ~len:0) |> err;
-  lazy (Bstr.memcpy a ~src_off:0 b ~dst_off:0 ~len:(-1)) |> err
+  lazy (Bstr.memcpy a ~src_off:0 b ~dst_off:0 ~len:(-1)) |> err;
+  lazy (Bstr.fill a '\000' ~off:(-1) ~len:0) |> err;
+  lazy (Bstr.fill a '\000' ~len:(-1)) |> err
 
 let test73 =
   let descr = {text|copy|text} in
@@ -1257,7 +1259,7 @@ let test73 =
   let test arr = eq (Bstr.copy arr) arr in
   test (Bstr.of_string "\x01\x02\x03\x04\x05");
   test (Bstr.of_string "un deux trois");
-  test (Bstr.init 255 Char.unsafe_chr)
+  test (Bstr.init 256 Char.unsafe_chr)
 
 let test74 =
   let descr = {text|with_index_range (no allocation)|text} in
@@ -1309,6 +1311,22 @@ let test75 =
   no_alloc a ~first:(-1) ~last:2;
   no_alloc a ~first:(-1) ~last:3
 
+let test76 =
+  let descr = {text|blit_to_bytes|text} in
+  Test.test ~title:"blit_to_bytes" ~descr @@ fun () ->
+  let buf = Bytes.create 256 in
+  let bstr = Bstr.init 256 Char.unsafe_chr in
+  Bstr.blit_to_bytes bstr ~src_off:0 buf ~dst_off:0 ~len:256;
+  check (String.init 256 Char.unsafe_chr = Bytes.unsafe_to_string buf);
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
+  lazy (Bstr.blit_to_bytes bstr ~src_off:(-1) buf ~dst_off:0 ~len:0) |> err;
+  lazy (Bstr.blit_to_bytes bstr ~src_off:0 buf ~dst_off:(-1) ~len:0) |> err;
+  lazy (Bstr.blit_to_bytes bstr ~src_off:0 buf ~dst_off:0 ~len:(-1)) |> err
+
 let ( / ) = Filename.concat
 
 let () =
@@ -1322,7 +1340,7 @@ let () =
     ; test46; test47; test48; test49; test50; test51; test52; test53; test54
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
     ; test64; test65; test66; test67; test68; test69; test70; test71; test72
-    ; test73; test74; test75
+    ; test73; test74; test75; test76
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in

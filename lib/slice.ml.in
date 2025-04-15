@@ -78,3 +78,14 @@ let string ?(off= 0) ?len str =
     | None -> String.length str - off 
     | Some len -> len in
   Slice.unsafe_make ~off:0 ~len (S.string ~off ~len str)
+
+let overlap ({ buf= buf0; _ } as a) ({ buf= buf1; _ } as b) =
+  match S.overlap buf0 buf1 with
+  | None -> None
+  | Some (len, 0, 0) ->
+      if a.off >= b.off && a.off < b.off + b.len
+      then let offset = a.off - b.off in Some (len, 0, offset)
+      else if b.off >= a.off && b.off < a.off + a.len
+      then let offset = b.off + a.off in Some (len, offset, 0)
+      else None
+  | Some _ -> assert false
