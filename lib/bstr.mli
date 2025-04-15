@@ -1,5 +1,72 @@
 (** A small library for manipulating bigstrings.
 
+    A bigstring is a mutable data structure that contains a fixed-length
+    sequence of bytes. Each byte can be indexed in constant time for reading
+    and writing.
+
+    Given a byte sequence [bstr] of length [len], we can access each of the
+    [len] bytes of [bstr] via its index in the sequence. Indexes start at [0],
+    and will call an index valid in [bstr] if it falls within the range
+    [[0...len-1]] (inclusive). A position is the point between two bytes or at
+    the beginning or end of the sequence. We call a position valid in [bstr] if
+    it falls within the range [[0...len]] (inclusive). Note that byte at index
+    [n] is between positions [n] and [n+1].
+
+    Two parameters [off] and [len] are said to designate a valid range of [bstr]
+    if [len >= 0] and [off] and [off+len] are valid positions in [bstr].
+
+    Byte sequences can be modified in place, for instance via the {!val:set} and
+    {!val:blit} functions described below.
+
+    {1:bigarray Bigstrings & Bigarrays.}
+
+    Bigstring is a specialised version of {!module:Bigarray} that not only
+    handles bytes in the form of {!module:Char}acter but also imposes a "C-like"
+    (see {!val:Bigarray.c_layout}) view as described above and allows common
+    functions such as [memcpy(3)] or [memmove(3)] to be offered.
+
+    For more details about Bigstrings and Bigarrays, we invite you to read the
+    {!module:Bigarray} documentation, which offers more general functions that
+    can be applied to Bigstrings.
+
+    {1:bytes Bigstrings & Bytes.}
+
+    Like bytes, a bigstring is a mutable data structure that contains a
+    fixed-length sequence of bytes. However, a bigstring has a few special
+    features that can make it more interesting to use than bytes.
+
+    {2:location Bigstrings and the Garbage Collector.}
+
+    A bigstring is not allocated in the same way as a standard OCaml value. In
+    fact, the byte sequence that the bigstring refers to is found in the
+    {i C heap} (rather than the OCaml heap). This means that the byte sequence
+    can come from a [malloc(3)] or a function requesting a particular memory
+    area from the system such as [Unix.map_file].
+
+    This particularity has an implication with the GC: the byte sequence is
+    {b not relocatable}. That is to say that during the cycle of the Garbage
+    Collector, this byte sequence does not move — in contrast, a [bytes] can be
+    moved by the GC (typically, from the minor heap to the major heap).
+
+    Thus, bigstrings have advantages and disadvantages compared to bytes due to
+    this particularity:
+    - Creating a bigstring can be expensive. Whether it is with
+      [malloc(3)]/{!val:create} or [Unix.map_file], creating a bigstring will
+      always be more expensive than creating bytes with OCaml. For small byte
+      sequences, it is therefore preferable to use bytes.
+    - Since a bigstring cannot be moved, its position can be shared by [Thread]s
+      and/or [Domain]s without interacting with the GC. An example is being able
+      to perform a complex computation in parallel from the bytes of this
+      sequence without {i blocking} the Garbage Collector during this
+      computation.
+
+    Depending on these characteristics, it may be more advantageous to use a
+    bigstring rather than [bytes]. This basically depends on your usage, and the
+    special features of bigstrings can unlock opportunities to outperform byte
+    calculations or analysis.
+
+    {2:sub Sub-bigstrings.}
+
     To clarify the use of bigstrings in OCaml, we advise you to read the
     overview of bigstrings and the difference with bytes. After this theoretical
     reading, this module offers a whole host of useful functions for
@@ -46,13 +113,12 @@
     - it may be necessary, in system programming, to write to a particular
       address in order to interact with a device. In this case, the bigstring
       can be found as an OCaml value bridging a special memory area (such as the
-      framebuffer).
+      framebuffer). [Unix.map_file] is an example of this, offering a bigarray
+      derived from the result of [mmap(3P)].
 
-    This is somewhat equivalent to [Unix.map_file]. The latter uses [mmap(3P)],
-    which asks the kernel for a special memory address. This address can be
-    related (via the kernel) to an area on your hard disk that corresponds to a
-    file. In the case of unikernels or embedded systems, it's quite common to
-    prepare bigstrings according to the devices available.
+    This address can be related (via the kernel) to an area on your hard disk
+    that corresponds to a file. In the case of unikernels or embedded systems,
+    it's quite common to prepare bigstrings according to the devices available.
 
     A final feature of bigstring is that it can be seen as a slice. You can have
     another view of a bigstring that would be equally or smaller. For example,
@@ -63,8 +129,8 @@
     This can be useful for decoding packets, extracting information such as
     integers, without copying parts or all of the bigstring. For example, for a
     TCP/IP packet, we'd like to decode certain information but also give a slice
-    of the bigstring that corresponds to the packet's payload (so that we can
-    process this payload later without having to copy).
+    of the bigstring that corresponds to the packet's {i payload} (so that we
+    can process this payload later without having to copy).
 
     Finally, it may be interesting in an encoder of some kind to give bigstrings
     that the user can write to, and check that these bigstrings are part of a
@@ -154,7 +220,13 @@ val memcmp : t -> src_off:int -> t -> dst_off:int -> len:int -> int
     [memcmp] returns [0] is [s1] anmd [s2] don't match. *)
 
 val memchr : t -> off:int -> len:int -> char -> int
+(** [memchr t ~off ~len chr] scans [len] bytes (starting at [off]) of [t] for
+    the first instance of [chr]. It returns the position in [t] where the first
+    occurrence of [chr] is found. Otherwise, it returns [-1]. *)
+
 val memset : t -> off:int -> len:int -> char -> unit
+(** [memset t ~off ~len chr] fills [len] bytes (starting at [off]) into [t] with
+    the constant byte [chr]. *)
 
 val empty : t
 (** [empty] is an empty bigstring. *)
@@ -558,5 +630,11 @@ val iter : (char -> unit) -> t -> unit
     is equivalent to [fn t.{0}; fn t.{1}; ...; fn t.{length t - 1}; ()]. *)
 
 val to_seq : t -> char Seq.t
+(** Iterate on the bigstring, in increasing index order. Modifications of the
+    bigstring during iteration will be reflected in the sequence. *)
+
 val to_seqi : t -> (int * char) Seq.t
+(** Iterate on the bigstring, in increasing order, yielding indices along chars. *)
+
 val of_seq : char Seq.t -> t
+(** Create a bigstring from the generator. *)

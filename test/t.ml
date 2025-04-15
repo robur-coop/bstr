@@ -1250,6 +1250,65 @@ let test72 =
   lazy (Bstr.memcpy a ~src_off:(-1) b ~dst_off:0 ~len:0) |> err;
   lazy (Bstr.memcpy a ~src_off:0 b ~dst_off:0 ~len:(-1)) |> err
 
+let test73 =
+  let descr = {text|copy|text} in
+  Test.test ~title:"copy" ~descr @@ fun () ->
+  let eq a b = check (Bstr.to_string a = Bstr.to_string b) in
+  let test arr = eq (Bstr.copy arr) arr in
+  test (Bstr.of_string "\x01\x02\x03\x04\x05");
+  test (Bstr.of_string "un deux trois");
+  test (Bstr.init 255 Char.unsafe_chr)
+
+let test74 =
+  let descr = {text|with_index_range (no allocation)|text} in
+  Test.test ~title:"with_index_range (no allocation)" ~descr @@ fun () ->
+  let no_alloc ?first ?last bstr =
+    check (Bstr.with_index_range bstr ?first ?last == bstr || Bstr.is_empty bstr)
+  in
+  no_alloc Bstr.empty;
+  no_alloc ~first:(-1) Bstr.empty;
+  no_alloc ~first:0 Bstr.empty;
+  no_alloc ~first:1 Bstr.empty;
+  no_alloc ~first:2 Bstr.empty;
+  no_alloc ~last:(-1) Bstr.empty;
+  no_alloc ~last:0 Bstr.empty;
+  no_alloc ~last:1 Bstr.empty;
+  no_alloc ~last:2 Bstr.empty;
+  no_alloc ~first:(-1) ~last:(-1) Bstr.empty;
+  no_alloc ~first:(-1) ~last:0 Bstr.empty;
+  no_alloc ~first:(-1) ~last:1 Bstr.empty;
+  no_alloc ~first:0 ~last:(-1) Bstr.empty;
+  no_alloc ~first:0 ~last:0 Bstr.empty;
+  no_alloc ~first:0 ~last:1 Bstr.empty;
+  no_alloc ~first:1 ~last:(-1) Bstr.empty;
+  no_alloc ~first:1 ~last:0 Bstr.empty;
+  no_alloc ~first:1 ~last:1 Bstr.empty
+
+let test75 =
+  let descr = {text|with_index_range|text} in
+  Test.test ~title:"with_index_range" ~descr @@ fun () ->
+  let no_alloc ?first ?last bstr =
+    check (Bstr.with_index_range bstr ?first ?last == bstr || Bstr.is_empty bstr)
+  in
+  let is_empty ?first ?last bstr =
+    check (Bstr.is_empty (Bstr.with_index_range bstr ?first ?last))
+  in
+  let a = Bstr.of_string "a" in
+  no_alloc a;
+  no_alloc a ~first:(-1);
+  no_alloc a ~first:0;
+  is_empty a ~first:1;
+  is_empty a ~first:2;
+  is_empty a ~last:(-1);
+  no_alloc a ~last:0;
+  no_alloc a ~last:1;
+  no_alloc a ~last:2;
+  is_empty a ~first:(-1) ~last:(-1);
+  no_alloc a ~first:(-1) ~last:0;
+  no_alloc a ~first:(-1) ~last:1;
+  no_alloc a ~first:(-1) ~last:2;
+  no_alloc a ~first:(-1) ~last:3
+
 let ( / ) = Filename.concat
 
 let () =
@@ -1263,6 +1322,7 @@ let () =
     ; test46; test47; test48; test49; test50; test51; test52; test53; test54
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
     ; test64; test65; test66; test67; test68; test69; test70; test71; test72
+    ; test73; test74; test75
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in

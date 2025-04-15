@@ -560,7 +560,7 @@ let with_index_range ?(first = 0) ?last bstr =
   in
   let first = if first < 0 then 0 else first in
   if first > max_idx || last < 0 || first > last then empty
-  else if first == 0 && last = max_idx then bstr
+  else if first == 0 && last == max_idx then bstr
   else unsafe_sub bstr first (last + 1 - first)
 
 let is_white chr = chr == ' ' || chr == '\t'

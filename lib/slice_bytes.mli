@@ -159,3 +159,16 @@ val sub_string : t -> off:int -> len:int -> string
 val to_string : t -> string
 (** [to_string slice] is equivalent to
     [sub_string slice ~off:0 ~len:(length slice)]. *)
+
+val is_empty : t -> bool
+(** [is_empty bstr] is [length bstr = 0]. *)
+
+val of_string : string -> t
+(** [of_string str] returns a new {!type:t} that contains the contents of the
+    given string [str]. *)
+
+val string : ?off:int -> ?len:int -> string -> t
+(** [string ~off ~len str] is the sub-buffer of [str] that starts at position
+    [off] (defaults to [0]) and stops at position [off + len] (defaults to
+    [String.length str]). [str] is fully-replaced by a fresh allocated
+    {!type:t}. *)

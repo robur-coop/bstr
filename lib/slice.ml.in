@@ -57,6 +57,7 @@ let fill { off; len; buf; } ?off:(off'= 0) ?len:len' chr =
 
 let sub t ~off ~len = Slice.sub t ~off ~len
 let shift t n = Slice.shift t n
+let is_empty t = Slice.is_empty t
 
 let sub_string { Slice.buf; off; _ } ~off:off' ~len =
   let dst = Bytes.create len in
@@ -67,3 +68,13 @@ let to_string { Slice.buf; off= src_off; len } =
   let dst = Bytes.create len in
   S.blit_to_bytes buf ~src_off dst ~dst_off:0 ~len;
   Bytes.unsafe_to_string dst
+
+let of_string str =
+  let off = 0 and len = String.length str in
+  Slice.unsafe_make ~off ~len (S.of_string str)
+
+let string ?(off= 0) ?len str =
+  let len = match len with 
+    | None -> String.length str - off 
+    | Some len -> len in
+  Slice.unsafe_make ~off:0 ~len (S.string ~off ~len str)

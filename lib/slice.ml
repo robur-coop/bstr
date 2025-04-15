@@ -7,6 +7,7 @@ let pp ppf { off; len; _ } =
   Format.fprintf ppf "@[<hov>{ off=@ %d;@ len=@ %d;@ }@]" off len
 
 let length { len; _ } = len
+let is_empty { len; _ } = len == 0
 
 let sub t ~off ~len =
   let off' = t.off + off in

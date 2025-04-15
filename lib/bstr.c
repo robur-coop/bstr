@@ -122,11 +122,11 @@ CAMLprim value bstr_bytecode_memcmp(value s1, value s1_off, value s2,
 #define __MEM1(name)                                                           \
   intnat bstr_native_##name(value src, intnat src_off, intnat src_len,         \
                             intnat va) {                                       \
-    void *res = name(bstr_uint8_off(src, src_off), va, src_len);               \
+    uint8_t *res = name(bstr_uint8_off(src, src_off), va, src_len);            \
     if (res == NULL)                                                           \
       return (-1);                                                             \
                                                                                \
-    return ((intnat)(res - src));                                              \
+    return ((intnat)(res - bstr_uint8_off(src, src_off)));                     \
   }                                                                            \
                                                                                \
   CAMLprim value bstr_bytecode_##name(value src, value src_off, value src_len, \

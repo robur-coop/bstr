@@ -5,6 +5,7 @@ val pp : Format.formatter -> 'a t -> unit
 val length : 'a t -> int
 val sub : 'a t -> off:int -> len:int -> 'a t
 val shift : 'a t -> int -> 'a t
+val is_empty : 'a t -> bool
 
 module type R = sig
   type t
