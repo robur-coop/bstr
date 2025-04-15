@@ -1,14 +1,15 @@
 open Bechamel
 open Toolkit
 
-let src = "0123456789"
-let cs = Cstruct.create 32
-let bstr = Bstr.create 32
-let cstruct_blit () = Cstruct.blit_from_string src 0 cs 0 10
-let bstr_blit () = Bstr.blit_from_string src ~src_off:0 bstr ~dst_off:0 ~len:10
+let src = String.make 256 '\x10'
+let cs = Cstruct.create 512
+let bstr = Bstr.create 512
+let bigstringaf = Bigstringaf.create 512
+let cstruct_blit () = Cstruct.blit_from_string src 0 cs 0 256
+let bstr_blit () = Bstr.blit_from_string src ~src_off:0 bstr ~dst_off:0 ~len:256
 
 let bigstringaf_blit () =
-  Bigstringaf.blit_from_string src ~src_off:0 bstr ~dst_off:0 ~len:10
+  Bigstringaf.blit_from_string src ~src_off:0 bigstringaf ~dst_off:0 ~len:256
 
 let cstruct_blit = Staged.stage cstruct_blit
 let bstr_blit = Staged.stage bstr_blit

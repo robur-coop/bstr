@@ -58,6 +58,15 @@ remains **the fastest** operation compared to `Bstr` and `Bigstringaf`. If you
 want to have the same performance as `Cstruct`, the specialized `Slice` module
 for `Bstr.t` values is equivalent.
 
+Here is a comparative table of the `sub` function between all implementations
+(AMD Ryzen 9 7950X 16-Core Processor):
+
++-----+-------------+--------+---------+-------+
+|     | bigstringaf |   bstr | cstruct | slice |
++-----+-------------+--------+---------+-------+
+| sub |     20.0 ns | 17.8ns |   2.8ns | 2.4ns |
++-----+-------------+--------+---------+-------+
+
 ### Fast `blit`
 
 `blit` from a string or a bytes is a little faster than `Bigstringaf` and
@@ -65,22 +74,31 @@ for `Bstr.t` values is equivalent.
 "tags" to describe the FFI with the C `memcpy` function (specifically the
 [\[@untagged\]][untagged] tag).
 
+Here is a comparative table of the `blit_from_string` function between all the
+implementations:
+
++------------------+-------------+-------+---------+
+|                  | bigstringaf |  bstr | cstruct |
++------------------+-------------+-------+---------+
+| blit_from_string |       5.1ns | 4.3ns |   4.7ns |
++------------------+-------------+-------+---------+
+
 #### _mmaped_ or not? (GC lock)
 
 There are several ways to copy bytes between two bigarrays:
-- the "mmaped" version
-- the simple version
+- the "mmaped" version (`{memcpy,memmove}_mmaped`)
+- the simple version (`{memcpy,memmove}`)
 
 The first is quite specific because it releases the GC lock after a certain
 number of bytes have been copied. This can be advantageous if you want to make a
 large copy between two bigarrays in parallel in a `Thread`.
 
 If we specify _mmaped_, it is because the copy between two bigarrays, one of
-which may come from `Unix.map_file`, can also take time (and we may want to do
-it in parallel in a `Thread`) since it involves reading/writing on the disk.
+which **may** come from `Unix.map_file`, can also take time (and we may want to
+do it in parallel in a `Thread`) since it involves reading/writing on the disk.
 
-Finally, the simple version does not release the GC lock and only applies the
-desired function (`memmove` or `memcpy`).
+The simple version does not release the GC lock and only applies the desired
+function (`memmove` or `memcpy`).
 
 #### `memmove` or `memcpy`?
 
@@ -92,3 +110,9 @@ To find out, you can use the `Bstr.overlap` function, which checks whether or
 not the two bigarrays given have a common memory area.
 
 [^1]: `Bin` is currently being designed with this in mind.
+
+[astring]: https://github.com/dbuenzli/astring
+[cstruct]: https://github.com/mirage/ocaml-cstruct
+[repr]: https://github.com/mirage/repr
+[bigstringaf]: https://github.com/inhabitedtype/bigstringaf
+[untagged]: https://ocaml.org/manual/5.3/attributes.html
