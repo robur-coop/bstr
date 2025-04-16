@@ -97,7 +97,7 @@ val memcpy_mmaped : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
     {i mmaped} bigarray (from [Unix.map_file]). In this specific case, copying
     from one to the other can take some time because it involves reading/writing
     to disk. The operation can take longer than if the two bigarrays were
-    allocated via [malloc()]/Bigarray.Array1.create.
+    allocated via [malloc()]/{!val:Bigarray.Array1.create}.
 
     It may therefore be worthwhile to release the GC lock so that this specific
     operation can be carried out in parallel (in a [Thread]) without
@@ -123,7 +123,7 @@ val memmove_mmaped : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
     {i mmaped} bigarray (from [Unix.map_file]). In this specific case, copying
     from one to the other can take some time because it involves reading/writing
     to disk. The operation can take longer than if the two bigarrays were
-    allocated via [malloc()]/Bigarray.Array1.create.
+    allocated via [malloc()]/{!val:Bigarray.Array1.create}.
 
     It may therefore be worthwhile to release the GC lock so that this specific
     operation can be carried out in parallel (in a [Thread]) without
@@ -176,6 +176,8 @@ val unsafe_set : t -> int -> char -> unit
     performed. *)
 
 val chop : ?rev:bool -> t -> char option
+(** [chop bstr] returns the first element of [bstr] or the last element if
+    [rev = true]. If [bstr] is empty, it returns [None]. *)
 
 val create : int -> t
 (** [create len] returns a new byte sequence of length [len]. The sequence
@@ -258,19 +260,13 @@ val blit_to_bytes : t -> src_off:int -> bytes -> dst_off:int -> len:int -> unit
 
 (*
 val extend : t -> int -> int -> t
-val concat : t -> t list -> t
 val cat : t -> t -> t
-val iter : (char -> unit) -> t -> unit
-val iteri : (int -> char -> unit) -> t -> unit
 val map : (char -> char) -> t -> t
 val mapi : (int -> char -> char) -> t -> t
 val fold_left : ('acc -> char -> 'acc) -> 'acc -> t -> 'acc
 val fold_right : (char -> 'acc -> 'acc) -> t -> 'acc -> 'acc
 val index : t -> ?rev:bool -> ?from:int -> char -> int
 val contains : t -> ?rev:bool -> ?from:int -> char -> bool
-val compare : t -> t -> int
-val starts_with : prefix:string -> t -> bool
-val ends_with : suffix:string -> t -> bool
 *)
 
 (** {2 Decode integers from a byte sequence.} *)
@@ -391,8 +387,10 @@ val sub : t -> off:int -> len:int -> t
 (** [sub bstr ~off ~len] does not allocate a bigstring, but instead returns a
     new view into [bstr] starting at [off], and with length [len].
 
-    {b Note} that this does not allocate a new buffer, but instead shares the
-    buffer of [bstr] with the newly-returned bigstring.
+    {b Note} [sub] does not allocate a new buffer, but instead shares the memory
+    area of [bstr] with the newly-returned bigstring. This means that the
+    changes ([set{,_*}] functions) made to the returned bigstring will also be
+    reflected in the [bstr] bigstring given.
 
     {b Note} [sub] is more expensive than a [Slice.sub] (about 8 times slower).
     If you want to focus on performance while avoiding copying, it's best to use
@@ -461,6 +459,7 @@ val constant_equal : t -> t -> bool
     comparing passwords — and avoiding an {i timing attack}. *)
 
 val compare : t -> t -> int
+(** [compare bstr0 bstr1] sorts [bstr0] and [bstr1] in lexicographical order. *)
 
 val with_range : ?first:int -> ?len:int -> t -> t
 (** [with_range ~first ~len bstr] are the consecutive bytes of [bstr] whose
