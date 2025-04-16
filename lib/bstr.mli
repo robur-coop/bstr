@@ -460,6 +460,8 @@ val constant_equal : t -> t -> bool
     function continues even if a difference exists. This function is useful when
     comparing passwords — and avoiding an {i timing attack}. *)
 
+val compare : t -> t -> int
+
 val with_range : ?first:int -> ?len:int -> t -> t
 (** [with_range ~first ~len bstr] are the consecutive bytes of [bstr] whose
     indices exist in the range \[[first];[first + len - 1]\].

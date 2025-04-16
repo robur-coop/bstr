@@ -495,7 +495,15 @@ let test53 =
   check_raise exn (fun () -> ignore (Bstr.get x 2));
   check_raise exn (fun () -> ignore (Bstr.get x 1));
   check (Bstr.get x 0 = 'c');
-  check (Bstr.get_uint8 x 0 = 0x63)
+  check (Bstr.get_uint8 x 0 = 0x63);
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
+  lazy (Bstr.string ~off:(-1) ~len:0 "") |> err;
+  lazy (Bstr.string ~off:0 ~len:(-1) "") |> err;
+  lazy (Bstr.string ~off:1 ~len:1 "\x00") |> err
 
 let test54 =
   let descr = {text|chop|text} in
@@ -1250,7 +1258,9 @@ let test72 =
   lazy (Bstr.memcpy a ~src_off:(-1) b ~dst_off:0 ~len:0) |> err;
   lazy (Bstr.memcpy a ~src_off:0 b ~dst_off:0 ~len:(-1)) |> err;
   lazy (Bstr.fill a '\000' ~off:(-1) ~len:0) |> err;
-  lazy (Bstr.fill a '\000' ~len:(-1)) |> err
+  lazy (Bstr.fill a '\000' ~len:(-1)) |> err;
+  lazy (Bstr.fill a '\000' ~off:10) |> err;
+  lazy (Bstr.fill a '\000' ~off:0 ~len:10) |> err
 
 let test73 =
   let descr = {text|copy|text} in
@@ -1325,7 +1335,64 @@ let test76 =
   in
   lazy (Bstr.blit_to_bytes bstr ~src_off:(-1) buf ~dst_off:0 ~len:0) |> err;
   lazy (Bstr.blit_to_bytes bstr ~src_off:0 buf ~dst_off:(-1) ~len:0) |> err;
-  lazy (Bstr.blit_to_bytes bstr ~src_off:0 buf ~dst_off:0 ~len:(-1)) |> err
+  lazy (Bstr.blit_to_bytes bstr ~src_off:0 buf ~dst_off:0 ~len:(-1)) |> err;
+  lazy (Bstr.blit_to_bytes bstr ~src_off:0 buf ~dst_off:0 ~len:512) |> err;
+  lazy (Bstr.blit_to_bytes bstr ~src_off:0 buf ~dst_off:256 ~len:256) |> err
+
+let test77 =
+  let descr = {text|compare|text} in
+  Test.test ~title:"compare" ~descr @@ fun () ->
+  let ( % ) f g = fun x -> f (g x) in
+  let from_list lst =
+    Bstr.init (List.length lst) (Char.unsafe_chr % List.nth lst)
+  in
+  let norm expect a b =
+    let result = Bstr.compare a b in
+    Format.eprintf ">>> res:%d\n%!" result;
+    if result == 0 then check (expect == 0)
+    else if result < 0 then check (expect == -1)
+    else check (expect == 1)
+  in
+  norm 0
+    (from_list [ 1; 2; 3; -4; 127; -128 ])
+    (from_list [ 1; 2; 3; -4; 127; -128 ]);
+  norm 1
+    (from_list [ 1; 2; 3; -4; 127; -128 ])
+    (from_list [ 1; 2; 3; 4; 127; -128 ]);
+  norm 1
+    (from_list [ 1; 2; 3; -4; 127; -128 ])
+    (from_list [ 1; 2; 3; -4; 42; -128 ]);
+  norm (-1) (from_list []) (from_list [ 1 ]);
+  norm 1 (from_list [ 1 ]) (from_list [])
+
+let test78 =
+  let descr = {text|blit_from_bytes (error)|text} in
+  Test.test ~title:"blit_from_bytes (error)" ~descr @@ fun () ->
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
+  let buf = Bytes.make 1 '\x00' in
+  let bstr = Bstr.string "\x00" in
+  lazy (Bstr.blit_from_bytes buf ~src_off:(-1) bstr ~dst_off:0 ~len:0) |> err;
+  lazy (Bstr.blit_from_bytes buf ~src_off:0 bstr ~dst_off:(-1) ~len:0) |> err;
+  lazy (Bstr.blit_from_bytes buf ~src_off:0 bstr ~dst_off:0 ~len:(-1)) |> err;
+  lazy (Bstr.blit_from_bytes buf ~src_off:0 bstr ~dst_off:1 ~len:1) |> err;
+  lazy (Bstr.blit_from_bytes buf ~src_off:1 bstr ~dst_off:0 ~len:1) |> err
+
+let test79 =
+  let descr = {text|sub_string (error)|text} in
+  Test.test ~title:"sub_string (error)" ~descr @@ fun () ->
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
+  lazy (Bstr.sub_string ~off:(-1) ~len:0 Bstr.empty) |> err;
+  lazy (Bstr.sub_string ~off:0 ~len:(-1) Bstr.empty) |> err;
+  let buf = Bstr.string "\x00" in
+  lazy (Bstr.sub_string ~off:1 ~len:1 buf) |> err
 
 let ( / ) = Filename.concat
 
@@ -1340,7 +1407,7 @@ let () =
     ; test46; test47; test48; test49; test50; test51; test52; test53; test54
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
     ; test64; test65; test66; test67; test68; test69; test70; test71; test72
-    ; test73; test74; test75; test76
+    ; test73; test74; test75; test76; test77; test78; test79
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in

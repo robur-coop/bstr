@@ -252,12 +252,12 @@ let get_uint16_be bstr i =
   if not Sys.big_endian then swap16 (get_uint16_ne bstr i)
   else get_uint16_ne bstr i
 
-let _unsafe_get_uint16_le bstr i =
+let[@coverage off] _unsafe_get_uint16_le bstr i =
   (* TODO(dinosaure): for unicode. *)
   if Sys.big_endian then swap16 (unsafe_get_uint16_ne bstr i)
   else unsafe_get_uint16_ne bstr i
 
-let _unsafe_get_uint16_be bstr i =
+let[@coverage off] _unsafe_get_uint16_be bstr i =
   (* TODO(dinosaure): for unicode. *)
   if not Sys.big_endian then swap16 (unsafe_get_uint16_ne bstr i)
   else unsafe_get_uint16_ne bstr i
@@ -285,12 +285,12 @@ let get_int64_be bstr i =
   if not Sys.big_endian then swap64 (get_int64_ne bstr i)
   else get_int64_ne bstr i
 
-let _unsafe_set_uint16_le bstr i x =
+let[@coverage off] _unsafe_set_uint16_le bstr i x =
   (* TODO(dinosaure): for unicode. *)
   if Sys.big_endian then unsafe_set_uint16_ne bstr i (swap16 x)
   else unsafe_set_uint16_ne bstr i x
 
-let _unsafe_set_uint16_be bstr i x =
+let[@coverage off] _unsafe_set_uint16_be bstr i x =
   (* TODO(dinosaure): for unicode. *)
   if Sys.big_endian then unsafe_set_uint16_ne bstr i x
   else unsafe_set_uint16_ne bstr i (swap16 x)
@@ -513,8 +513,9 @@ let exists sat bstr =
 
 let compare a b =
   let len_a = length a and len_b = length b in
-  let len = if len_a < len_b then len_a else len_b in
-  unsafe_memcmp a 0 b 0 len
+  if len_a < len_b then -1
+  else if len_a > len_b then 1
+  else unsafe_memcmp a 0 b 0 len_a
 
 let equal a b = compare a b == 0
 
