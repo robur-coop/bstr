@@ -138,16 +138,26 @@ val memcmp : t -> src_off:int -> t -> dst_off:int -> len:int -> int
 (** [memcmp s1 ~src_off s2 ~dst_off ~len] compares the first [len] bytes of the
     memory areas [s1] (starting at [src_off]) and [s2] (starting at [dst_off]).
 
-    [memcmp] returns [0] is [s1] anmd [s2] don't match. *)
+    [memcmp] returns [0] is [s1] and [s2] don't match.
+
+    @raise Invalid_argument
+      if [src_off] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
 
 val memchr : t -> off:int -> len:int -> char -> int
 (** [memchr t ~off ~len chr] scans [len] bytes (starting at [off]) of [t] for
     the first instance of [chr]. It returns the position in [t] where the first
-    occurrence of [chr] is found. Otherwise, it returns [-1]. *)
+    occurrence of [chr] is found. Otherwise, it returns [-1].
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [t]. *)
 
 val memset : t -> off:int -> len:int -> char -> unit
 (** [memset t ~off ~len chr] fills [len] bytes (starting at [off]) into [t] with
-    the constant byte [chr]. *)
+    the constant byte [chr].
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [t]. *)
 
 val empty : t
 (** [empty] is an empty bigstring. *)
@@ -195,7 +205,10 @@ val string : ?off:int -> ?len:int -> string -> t
 (** [string ~off ~len str] is the sub-buffer of [str] that starts at position
     [off] (defaults to [0]) and stops at position [off + len] (defaults to
     [String.length str]). [str] is fully-replaced by a fresh allocated
-    {!type:t}. *)
+    {!type:t}.
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [str]. *)
 
 val fill : t -> ?off:int -> ?len:int -> char -> unit
 (** [fill t off len chr] modifies [t] in place, replacing [len] characters with
@@ -266,7 +279,6 @@ val mapi : (int -> char -> char) -> t -> t
 val fold_left : ('acc -> char -> 'acc) -> 'acc -> t -> 'acc
 val fold_right : (char -> 'acc -> 'acc) -> t -> 'acc -> 'acc
 val index : t -> ?rev:bool -> ?from:int -> char -> int
-val contains : t -> ?rev:bool -> ?from:int -> char -> bool
 *)
 
 (** {2 Decode integers from a byte sequence.} *)
@@ -407,7 +419,10 @@ val overlap : t -> t -> (int * int * int) option
 
 val sub_string : t -> off:int -> len:int -> string
 (** [sub_string bstr ~off ~len] returns a string of length [len] containing the
-    bytes of [bstr] starting at [off]. *)
+    bytes of [bstr] starting at [off].
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [t]. *)
 
 val to_string : t -> string
 (** [to_string bstr] is equivalent to
