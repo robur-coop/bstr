@@ -461,6 +461,14 @@ val contains : t -> ?off:int -> ?len:int -> char -> bool
 (** [contains bstr ?off ?len chr] is [true] if and only if [chr] appears in
     [len] byte(s)'s [bstr] after position [off] (defaults to [0]). *)
 
+val index : t -> ?off:int -> ?len:int -> char -> int option
+(** [index bstr ?off ?len chr] is the index of the first occurrence of [chr] in
+    [len] byte(s)'s [bstr] after position [off] (defaults to [0]). If [chr] does
+    not occur in given range of [bstr], we return [None].
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [bstr]. *)
+
 val equal : t -> t -> bool
 (** [equal a b] is [a = b]. *)
 

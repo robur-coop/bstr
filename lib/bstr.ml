@@ -486,6 +486,10 @@ let contains bstr ?(off = 0) ?len chr =
   let len = match len with Some len -> len | None -> length bstr - off in
   memchr bstr ~off ~len chr != -1
 
+let index bstr ?(off = 0) ?len chr =
+  let len = match len with Some len -> len | None -> length bstr - off in
+  match memchr bstr ~off ~len chr with -1 -> None | value -> Some value
+
 let compare a b =
   let len_a = length a and len_b = length b in
   if len_a < len_b then -1
