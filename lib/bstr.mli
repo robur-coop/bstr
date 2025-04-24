@@ -442,9 +442,9 @@ val for_all : (char -> bool) -> t -> bool
 (** [for_all p bstr] is [true] iff for all indices [idx] of [bstr],
     [p bstr.{idx} = true]. *)
 
-val exists : (char -> bool) -> t -> bool
-(** [exists p bstr] is [true] iff there exists an index [idx] of [bstr] with
-    [p bstr.{idx} = true]. *)
+val contains : t -> ?off:int -> ?len:int -> char -> bool
+(** [contains bstr ?off ?len chr] is [true] if and only if [chr] appears in
+    [len] byte(s)'s [bstr] after position [off] (defaults to [0]). *)
 
 val equal : t -> t -> bool
 (** [equal a b] is [a = b]. *)

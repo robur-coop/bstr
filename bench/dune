@@ -32,7 +32,7 @@
 
 (executable
  (name equal)
- (libraries base64 slice.bstr bstr cstruct bechamel bechamel-js))
+ (libraries base64 slice.bstr bstr cstruct bigstringaf bechamel bechamel-js))
 
 (rule
  (targets equal.json)
@@ -45,3 +45,19 @@
  (targets equal.html)
  (action
   (system "%{bin:bechamel-html} < %{dep:equal.json} > %{targets}")))
+
+(executable
+ (name contains)
+ (libraries base64 bigstringaf bstr cstruct bechamel bechamel-js))
+
+(rule
+ (targets contains.json)
+ (action
+  (with-stdout-to
+   %{targets}
+   (run ./contains.exe))))
+
+(rule
+ (targets contains.html)
+ (action
+  (system "%{bin:bechamel-html} < %{dep:contains.json} > %{targets}")))

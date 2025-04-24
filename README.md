@@ -24,12 +24,13 @@ libraries:
 
 |                 | bstr | cstruct | bigstringaf | slice.bstr |
 |-----------------|------|---------|-------------|------------|
-|         overlap |   ✅ |      ❌ |          ❌ |         ✅ |
-|          memcpy |   ✅ |      ❌ |          ✅ |         ✅ |
-|         memmove |   ✅ |      ✅ |          ✅ |         ✅ |
-|        fast sub |   ❌ |      ❌ |          ❌ |         ✅ |
-|       fast blit |   ✅ |      ❌ |          ❌ |         ✅ |
+|       `overlap` |   ✅ |      ❌ |          ❌ |         ✅ |
+|        `memcpy` |   ✅ |      ❌ |          ✅ |         ✅ |
+|       `memmove` |   ✅ |      ✅ |          ✅ |         ✅ |
+|      fast `sub` |   ❌ |      ❌ |          ❌ |         ✅ |
+|     fast `blit` |   ✅ |      ❌ |          ❌ |         ✅ |
 | release GC lock |   ✅ |      ❌ |          ❌ |         ✅ |
+| fast `contains` |   ✅ |      ❌ |          ✅ |         ❌ |
 
 ### Fast `sub`
 

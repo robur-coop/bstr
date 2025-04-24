@@ -823,6 +823,11 @@ let test62 =
     | Some (a, b), Some (u, v) -> check (Bstr.equal a u && Bstr.equal b v)
     | _ -> check false
   in
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
   let open Bstr in
   test (cut ~sep:"," empty) None;
   test (cut ~sep:"," (string ",")) (Some (string "", string ""));
@@ -852,7 +857,8 @@ let test62 =
   test (cut ~sep:"aa" (string "aaaa")) (Some (string "", string "aa"));
   test (cut ~sep:"aa" (string "aaaaa")) (Some (string "", string "aaa"));
   test (cut ~sep:"aa" (string "aaaaaa")) (Some (string "", string "aaaa"));
-  test (cut ~sep:"ab" (string "faaaa")) None
+  test (cut ~sep:"ab" (string "faaaa")) None;
+  lazy (cut ~sep:"" (string "a")) |> err
 
 let test63 =
   let descr = {text|cut ~rev:true|text} in
@@ -861,6 +867,11 @@ let test63 =
     match (a, b) with
     | None, None -> check true
     | Some (a, b), Some (u, v) -> check (Bstr.equal a u && Bstr.equal b v)
+    | _ -> check false
+  in
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
     | _ -> check false
   in
   let open Bstr in
@@ -898,7 +909,8 @@ let test63 =
   test (cut ~rev ~sep:"aa" (string "aaaa")) (Some (string "aa", string ""));
   test (cut ~rev ~sep:"aa" (string "aaaaa")) (Some (string "aaa", string ""));
   test (cut ~rev ~sep:"aa" (string "aaaaaa")) (Some (string "aaaa", string ""));
-  test (cut ~rev ~sep:"ab" (string "afaaaa")) None
+  test (cut ~rev ~sep:"ab" (string "afaaaa")) None;
+  lazy (cut ~rev ~sep:"" (string "a")) |> err
 
 let test64 =
   let descr = {text|binary {u,}int8|text} in
@@ -1277,6 +1289,14 @@ let test74 =
   let no_alloc ?first ?last bstr =
     check (Bstr.with_index_range bstr ?first ?last == bstr || Bstr.is_empty bstr)
   in
+  let is_empty ?first ?last bstr =
+    let bstr' = Bstr.with_index_range bstr ?first ?last in
+    check (Bstr.is_empty bstr')
+  in
+  let eq_range bstr ?first ?last str =
+    let bstr' = Bstr.with_index_range bstr ?first ?last in
+    check (Bstr.to_string bstr' = str)
+  in
   no_alloc Bstr.empty;
   no_alloc ~first:(-1) Bstr.empty;
   no_alloc ~first:0 Bstr.empty;
@@ -1294,7 +1314,17 @@ let test74 =
   no_alloc ~first:0 ~last:1 Bstr.empty;
   no_alloc ~first:1 ~last:(-1) Bstr.empty;
   no_alloc ~first:1 ~last:0 Bstr.empty;
-  no_alloc ~first:1 ~last:1 Bstr.empty
+  no_alloc ~first:1 ~last:1 Bstr.empty;
+  let abc = Bstr.string "abc" in
+  no_alloc abc ~first:(-1);
+  no_alloc abc ~first:0;
+  eq_range abc ~first:1 "bc";
+  eq_range abc ~first:2 "c";
+  is_empty abc ~first:3;
+  is_empty abc ~last:(-1);
+  eq_range abc ~last:0 "a";
+  eq_range abc ~last:1 "ab";
+  no_alloc abc ~last:2
 
 let test75 =
   let descr = {text|with_index_range|text} in
@@ -1394,6 +1424,29 @@ let test79 =
   let buf = Bstr.string "\x00" in
   lazy (Bstr.sub_string ~off:1 ~len:1 buf) |> err
 
+let test80 =
+  let descr = {text|contains|text} in
+  Test.test ~title:"contains" ~descr @@ fun () ->
+  let abc = Bstr.string "abc" in
+  check (Bstr.contains abc 'a');
+  check (Bstr.contains abc 'b');
+  check (Bstr.contains abc 'c');
+  check (Bstr.contains abc '0' == false);
+  check (Bstr.contains abc ~off:3 'a' == false);
+  check (Bstr.contains abc ~len:0 'a' == false)
+
+let test81 =
+  let descr = {text|constant_equal|text} in
+  Test.test ~title:"constant_equal" ~descr @@ fun () ->
+  let open Bstr in
+  check (constant_equal (string "a") empty == false);
+  check (constant_equal empty (string "a") == false);
+  check (constant_equal (string "a") (string "a"));
+  let foo = string "foo" in
+  let bar = string "bar" in
+  check (constant_equal foo foo);
+  check (constant_equal foo bar == false)
+
 let ( / ) = Filename.concat
 
 let () =
@@ -1407,7 +1460,7 @@ let () =
     ; test46; test47; test48; test49; test50; test51; test52; test53; test54
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
     ; test64; test65; test66; test67; test68; test69; test70; test71; test72
-    ; test73; test74; test75; test76; test77; test78; test79
+    ; test73; test74; test75; test76; test77; test78; test79; test80; test81
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in

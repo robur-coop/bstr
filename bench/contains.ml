@@ -17,36 +17,34 @@ let random length =
   in
   String.init length get
 
-let hash_eq_0 = random 4096
-let hash_eq_1 = Bytes.to_string (Bytes.of_string hash_eq_0)
+let str = random 4096
+let chr_into_str = str.[Random.int 4096]
 
 open Bechamel
 open Toolkit
 
-let bstr_equal =
-  let hash_eq_0 = Bstr.of_string hash_eq_0 in
-  let hash_eq_1 = Bstr.of_string hash_eq_1 in
+let bstr_contains =
+  let bstr = Bstr.of_string str in
   Test.make ~name:"bstr"
   @@ Staged.stage
-  @@ fun () -> Bstr.equal hash_eq_0 hash_eq_1
+  @@ fun () -> ignore (Bstr.contains bstr chr_into_str)
 
-let bigstringaf_equal =
-  let hash_eq_0 = Bigstringaf.of_string hash_eq_0 ~off:0 ~len:4096 in
-  let hash_eq_1 = Bigstringaf.of_string hash_eq_1 ~off:0 ~len:4096 in
+let bigstringaf_contains =
+  let bstr = Bigstringaf.of_string str ~off:0 ~len:4096 in
   Test.make ~name:"bigstringaf"
   @@ Staged.stage
-  @@ fun () -> Bigstringaf.memcmp hash_eq_0 0 hash_eq_1 0 4096
+  @@ fun () -> ignore (Bigstringaf.memchr bstr 0 chr_into_str 4096)
 
-let cstruct_equal =
-  let hash_eq_0 = Cstruct.of_string hash_eq_0 in
-  let hash_eq_1 = Cstruct.of_string hash_eq_1 in
+let cstruct_contains =
+  let cs = Cstruct.of_string str in
+  let fn chr = chr == chr_into_str in
   Test.make ~name:"cstruct"
   @@ Staged.stage
-  @@ fun () -> Cstruct.equal hash_eq_0 hash_eq_1
+  @@ fun () -> ignore (Cstruct.exists fn cs)
 
 let tests =
-  Test.make_grouped ~name:"equal" ~fmt:"%s %s"
-    [ bstr_equal; bigstringaf_equal; cstruct_equal ]
+  Test.make_grouped ~name:"contains" ~fmt:"%s %s"
+    [ bstr_contains; bigstringaf_contains; cstruct_contains ]
 
 let benchmark () =
   let bootstrap = 0 and r_square = true and predictors = Measure.[| run |] in

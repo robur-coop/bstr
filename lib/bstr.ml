@@ -64,14 +64,10 @@ external set_int16_ne : t -> int -> int -> unit = "%caml_bigstring_set16"
 external get_int32_ne : t -> int -> int32 = "%caml_bigstring_get32"
 external set_int32_ne : t -> int -> int32 -> unit = "%caml_bigstring_set32"
 external set_int64_ne : t -> int -> int64 -> unit = "%caml_bigstring_set64"
-external unsafe_set_uint8 : t -> int -> int -> unit = "%caml_ba_unsafe_set_1"
 external unsafe_get_uint16_ne : t -> int -> int = "%caml_bigstring_get16u"
 
 external unsafe_set_uint16_ne : t -> int -> int -> unit
   = "%caml_bigstring_set16u"
-
-external unsafe_set_int32_ne : t -> int -> int32 -> unit
-  = "%caml_bigstring_set32u"
 
 external unsafe_get_int64_ne : t -> (int[@untagged]) -> (int64[@unboxed])
   = "bstr_bytecode_get64u" "bstr_native_get64u"
@@ -122,7 +118,7 @@ external unsafe_memset :
   -> (int[@untagged])
   -> (int[@untagged])
   -> (int[@untagged])
-  -> (int[@untagged]) = "bstr_bytecode_memchr" "bstr_native_memchr"
+  -> (int[@untagged]) = "bstr_bytecode_memset" "bstr_native_memset"
 [@@noalloc]
 
 let memcmp src ~src_off dst ~dst_off ~len =
@@ -193,30 +189,13 @@ external unsafe_get : t -> int -> char = "%caml_ba_unsafe_ref_1"
 external set : t -> int -> char -> unit = "%caml_ba_set_1"
 external unsafe_set : t -> int -> char -> unit = "%caml_ba_unsafe_set_1"
 
-let unsafe_fill bstr ~off ~len v =
-  let nv = Nativeint.of_int v in
-  let vv = Nativeint.(logor (shift_left nv 8) nv) in
-  let vvvv = Nativeint.(logor (shift_left vv 16) vv) in
-  let vvvv = Nativeint.to_int32 vvvv in
-  let len0 = len land 3 in
-  let len1 = len lsr 2 in
-  for i = 0 to len1 - 1 do
-    let i = i * 4 in
-    unsafe_set_int32_ne bstr (off + i) vvvv
-  done;
-  for i = 0 to len0 - 1 do
-    let i = (len1 * 4) + i in
-    unsafe_set_uint8 bstr (off + i) v
-  done
-
 let fill bstr ?(off = 0) ?len chr =
   let len = match len with Some len -> len | None -> length bstr - off in
-  if len < 0 || off < 0 || off > length bstr - len then invalid_arg "Bstr.fill";
-  unsafe_fill bstr ~off ~len (Char.code chr)
+  memset bstr ~off ~len chr
 
 let make len chr =
   let bstr = create len in
-  unsafe_fill bstr ~off:0 ~len (Char.code chr);
+  ignore (unsafe_memset bstr 0 len (Char.code chr));
   (* [Obj.magic] instead of [Char.code]? *)
   bstr
 
@@ -503,13 +482,9 @@ let for_all sat bstr =
     true
   with Break -> false
 
-let exists sat bstr =
-  try
-    for idx = 0 to length bstr - 1 do
-      if sat (unsafe_get bstr idx) then raise_notrace Break
-    done;
-    false
-  with Break -> true
+let contains bstr ?(off = 0) ?len chr =
+  let len = match len with Some len -> len | None -> length bstr - off in
+  memchr bstr ~off ~len chr != -1
 
 let compare a b =
   let len_a = length a and len_b = length b in
@@ -713,31 +688,28 @@ let split_on_char sep bstr =
 
 let concat sep = function
   | [] -> empty
-  | lst ->
+  | x :: r as lst ->
       let sep_len = String.length sep in
-      let res_len =
-        let rec go acc = function
-          | [] -> acc
-          | [ x ] -> acc + length x
-          | x :: r -> go (acc + length x + sep_len) r
-        in
-        go 0 lst
-      in
+      let fn acc bstr = acc + sep_len + length bstr in
+      let res_len = List.fold_left fn (length x) r in
       let res = create res_len in
-      let rec go dst_off = function
-        | [] -> ()
-        | [ x ] ->
-            let len = length x in
-            blit x ~src_off:0 res ~dst_off ~len
-        | x :: r ->
-            let len = length x in
-            blit x ~src_off:0 res ~dst_off ~len;
-            let dst_off = dst_off + len in
-            blit_from_string sep ~src_off:0 res ~dst_off ~len:sep_len;
-            let dst_off = dst_off + sep_len in
-            go dst_off r
+      let first = ref true in
+      let dst_off = ref 0 in
+      let fn bstr =
+        let len = length bstr in
+        if !first then begin
+          blit bstr ~src_off:0 res ~dst_off:!dst_off ~len;
+          first := false;
+          dst_off := !dst_off + len
+        end
+        else begin
+          blit_from_string sep ~src_off:0 res ~dst_off:!dst_off ~len:sep_len;
+          dst_off := !dst_off + sep_len;
+          blit bstr ~src_off:0 res ~dst_off:!dst_off ~len;
+          dst_off := !dst_off + len
+        end
       in
-      go 0 lst; res
+      List.iter fn lst; res
 
 let iter fn t =
   for i = 0 to length t - 1 do
