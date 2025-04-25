@@ -1,15 +1,14 @@
 # Bstr, Slice & Bin
 
-This small set of libraries offers a homogeneous API between 3 types and their
+This small set of libraries offers a homogeneous API between 2 types and their
 derivations with the slice type, as well as a small DSL for decoding "packets"
 (such as ARP or DNS) without too much difficulty.
 
-The aim is to homogenize the 3 types string, bytes and bigstring and to derive
-them with a slice type, giving the user all the levers needed to manipulate
-byte sequences, whether in the form of a bigstring, string or bytes. The slice
-view avoids copying when it comes to decoding a packet and extracting a
-sub-part. The slice also applies to bigstrings, whose `Bigarray.Array1.sub` is
-more expensive.
+The aim is to homogenize the 2 types bytes and bigstring and to derive them
+with a slice type, giving the user all the levers needed to manipulate byte
+sequences, whether in the form of a bigstring or bytes. The slice view avoids
+copying when it comes to decoding a packet and extracting a sub-part. The slice
+also applies to bigstrings, whose `Bigarray.Array1.sub` is more expensive.
 
 This set of libraries is a synthesis of [astring][astring] (which offers a range
 of useful functions as well as slice), [cstruct][cstruct] (which offers a
@@ -75,20 +74,35 @@ implementations:
 
 #### _mmaped_ or not? (GC lock)
 
-There are several ways to copy bytes between two bigarrays:
+There are 2 ways to copy bytes between two bigarrays:
 - the "mmaped" version (`{memcpy,memmove}_mmaped`)
 - the simple version (`{memcpy,memmove}`)
 
 The first is quite specific because it releases the GC lock after a certain
-number of bytes have been copied. This can be advantageous if you want to make a
-large copy between two bigarrays in parallel in a `Thread`.
+number of bytes (4096) have been copied. This can be advantageous if you want
+to make a large copy between two bigarrays in parallel in a `Thread`.
 
 If we specify _mmaped_, it is because the copy between two bigarrays, one of
 which **may** come from `Unix.map_file`, can also take time (and we may want to
 do it in parallel in a `Thread`) since it involves reading/writing on the disk.
 
-The simple version does not release the GC lock and only applies the desired
-function (`memmove` or `memcpy`).
+```ocaml
+let copy_to_file bstr filename () =
+  let len = Bstr.length bstr in
+  let fd = Unix.openfile filename Unix.[ O_WRONLY ] 0o644 in
+  let dst = Unix.map_file fd Bigarray.char Bigarray.c_layout false [| len |] in
+  let dst = Bigarray.array1_of_genarray dst in
+  Bstr.memcpy_mmaped bstr ~src_off:0 dst ~dst_off:0 ~len
+
+let () =
+  let th = Thread.create (copy_to_file bstr filename) () in
+  (* do something else in true parallel of [copy_to_file]. *)
+  (* the GC will not interrupt [th] during the copy. *)
+  Thread.join th
+```
+
+The simple version does **not** release the GC lock and only applies the
+desired function (`memmove` or `memcpy`).
 
 #### `memmove` or `memcpy`?
 
