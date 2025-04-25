@@ -82,24 +82,58 @@ val int8 : int t
 (** [int8] is a representation of 8-bit integers. *)
 
 val beuint16 : int t
+(** [beint16] is a representation of big-endian unsigned 16-bit integers. *)
+
 val leuint16 : int t
+(** [leint16] is a representation of little-endian unsigned 16-bit integers. *)
+
 val neuint16 : int t
+(** [neint16] is a representation of native-endian unsigned 16-bit integers. *)
+
 val beint16 : int t
+(** [beint16] is a representation of big-endian 16-bit integers. *)
+
 val leint16 : int t
+(** [leint16] is a representation of little-endian 16-bit integers. *)
+
 val neint16 : int t
+(** [neint16] is a representation of native-endian 16-bit integers. *)
+
 val beint32 : int32 t
+(** [beint32] is a representation of big-endian 32-bit integers. *)
+
 val leint32 : int32 t
+(** [leint32] is a representation of little-endian 32-bit integers. *)
+
 val neint32 : int32 t
+(** [neint32] is a representation of native-endian 32-bit integers. *)
+
 val beint64 : int64 t
+(** [beint64] is a representation of big-endian 64-bit integers. *)
+
 val leint64 : int64 t
+(** [leint64] is a representation of little-endian 64-bit integers. *)
+
 val neint64 : int64 t
+(** [neint64] is a representation of native-endian 64-bit integers. *)
+
 val varint : int t
+
 val bytes : int -> string t
+(** [bytes n] is a representation of a bytes sequence of [n] byte(s). *)
+
 val bstr : int -> Bstr.t t
+(** [bstr n] is a representation of a bigstring of [n] byte(s). *)
+
 val cstring : string t
 val until : char -> string t
+
 val const : 'a -> 'a t
+(** [const v] is [v] without a serialization mechanism. *)
+
 val seq : len:int -> 'a t -> 'a array t
+(** [seq ~len v] is a representation of fixed-length arrays of values of type
+    [v]. *)
 
 val map : 'b t -> ('b -> 'a) -> ('a -> 'b) -> 'a t
 (** This combinator allows defining a representative of one type in terms of
@@ -215,14 +249,17 @@ val ( |~ ) :
 val sealv : ('a, 'b, 'a -> 'a case_p) open_variant -> 'a t
 (** [sealv v] seals the open variant [v]. *)
 
-(* {2:decoder Decoder.} *)
+(** {2:decoder Decoder.} *)
 
 val decode_bstr : 'a t -> Bstr.t -> int ref -> 'a
-(** [decode_bstr enc] is the binary decoder for values of type [enc]. *)
+(** [decode_bstr repr] is the binary decoder for values of type [repr]. *)
+
+val decode : 'a t -> string -> int ref -> 'a
+
+(** {2:encoder Encoder.} *)
 
 val encode_bstr : 'a t -> 'a -> Bstr.t -> int ref -> unit
 val to_string : 'a t -> 'a -> string
-val decode : 'a t -> string -> int ref -> 'a
 
 module Size : sig
   type -'a size_of

@@ -75,9 +75,135 @@
     creation of this "proxy" {b remains} costly. In addition, this library is
     distributed with a new {!module:Slice_bstr} module. The latter offers a new
     type whose {!val:Slice_bstr.sub} function is much less costly than
-    {!val:sub}. *)
+    {!val:sub}.
+
+    {1 Bigstrings.} *)
 
 type t = (char, Bigarray.int8_unsigned_elt, Bigarray.c_layout) Bigarray.Array1.t
+
+(** {2 Constructors.} *)
+
+val empty : t
+(** [empty] is an empty bigstring. *)
+
+val create : int -> t
+(** [create len] returns a new byte sequence of length [len]. The sequence
+    {b is unitialized} and contains arbitrary bytes. *)
+
+val make : int -> char -> t
+(** [make len chr] is {!type:t} of length [len] with each index holding the
+    character [chr]. *)
+
+val copy : t -> t
+(** [copy t] returns a new byte sequence that contains the same bytes as the
+    argument. *)
+
+val init : int -> (int -> char) -> t
+(** [init len fn] returns a fresh byte sequence of length [len], with character
+    [idx] initialized to the result of [fn idx] (in increasing index order). *)
+
+(** {2 Memory-safe Operations.} *)
+
+val of_string : string -> t
+(** [of_string str] returns a new {!type:t} that contains the contents of the
+    given string [str]. *)
+
+val string : ?off:int -> ?len:int -> string -> t
+(** [string ~off ~len str] is the sub-buffer of [str] that starts at position
+    [off] (defaults to [0]) and stops at position [off + len] (defaults to
+    [String.length str]). [str] is fully-replaced by a fresh allocated
+    {!type:t}.
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [str]. *)
+
+val sub_string : t -> off:int -> len:int -> string
+(** [sub_string bstr ~off ~len] returns a string of length [len] containing the
+    bytes of [bstr] starting at [off].
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [t]. *)
+
+val to_string : t -> string
+(** [to_string bstr] is equivalent to
+    [sub_string bstr ~off:0 ~len:(length bstr)]. *)
+
+val length : t -> int
+(** [length bstr] is the number of bytes in [bstr]. *)
+
+val get : t -> int -> char
+(** [get bstr i] is the byte of [bstr]' at index [i]. This is equivalent to the
+    [bstr.{i}] notation.
+
+    @raise Invalid_argument if [i] is not an index of [bstr]. *)
+
+val set : t -> int -> char -> unit
+(** [set t i chr] modifies [t] in place, replacing the byte at index [i] with
+    [chr].
+
+    @raise Invalid_argument if [i] is not a valid index in [t]. *)
+
+val unsafe_get : t -> int -> char
+(** [unsafe_get t idx] is like {!val:get} except no bounds checking is
+    performed. *)
+
+val unsafe_set : t -> int -> char -> unit
+(** [unsafe_set t idx chr] is like {!val:set} except no bounds checking is
+    performed. *)
+
+val chop : ?rev:bool -> t -> char option
+(** [chop bstr] returns the first element of [bstr] or the last element if
+    [rev = true]. If [bstr] is empty, it returns [None]. *)
+
+val concat : string -> t list -> t
+(** [concat sep ts] concatenates the list of bigstrings [ts], inserting the
+    separator string [sep] between each. *)
+
+(** {2 Copy operation from one byte sequence to another.} *)
+
+val blit : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** [blit src ~src_off dst ~dst_off ~len] copies [len] bytes from byte sequence
+    [src], starting at index [src_off], to byte sequence [dst], starting at
+    index [dst_off]. It works correctly even if [src] and [dst] are (physically)
+    the same byte sequence, and the source and destination intervals overlap.
+
+    @raise Invalid_argument
+      if [src_off] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
+
+val blit_from_string :
+  string -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** Just like {!val:blit}, but with a string as source one.
+
+    {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
+    is used to do the copy.
+
+    @raise Invalid_argument
+      if [src_pos] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
+
+val blit_from_bytes :
+  bytes -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** Just like {!val:blit}, but with a bytes as source one.
+
+    {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
+    is used to do the copy.
+
+    @raise Invalid_argument
+      if [src_pos] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
+
+val blit_to_bytes : t -> src_off:int -> bytes -> dst_off:int -> len:int -> unit
+(** [blit_to_bytes src ~src_off dst ~dst_off ~len] copies [len] bytes from
+    [src], starting at index [src_off], to byte sequence [dst], starting at
+    index [dst_off].
+
+    {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
+    is used to do the copy.
+
+    @raise Invalid_argument
+      if [src_off] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
 
 val memcpy : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
 (** [memcpy src ~src_off dst ~dst_off ~len] copies [len] bytes from [src] to
@@ -144,14 +270,6 @@ val memcmp : t -> src_off:int -> t -> dst_off:int -> len:int -> int
       if [src_off] and [len] do not designate a valid range of [src], or if
       [dst_off] and [len] do not designate a valid range of [dst]. *)
 
-val memchr : t -> off:int -> len:int -> char -> int
-(** [memchr t ~off ~len chr] scans [len] bytes (starting at [off]) of [t] for
-    the first instance of [chr]. It returns the position in [t] where the first
-    occurrence of [chr] is found. Otherwise, it returns [-1].
-
-    @raise Invalid_argument
-      if [off] and [len] do not designate a valid range of [t]. *)
-
 val memset : t -> off:int -> len:int -> char -> unit
 (** [memset t ~off ~len chr] fills [len] bytes (starting at [off]) into [t] with
     the constant byte [chr].
@@ -159,127 +277,12 @@ val memset : t -> off:int -> len:int -> char -> unit
     @raise Invalid_argument
       if [off] and [len] do not designate a valid range of [t]. *)
 
-val empty : t
-(** [empty] is an empty bigstring. *)
-
-val length : t -> int
-(** [length bstr] is the number of bytes in [bstr]. *)
-
-val get : t -> int -> char
-(** [get bstr i] is the byte of [bstr]' at index [i]. This is equivalent to the
-    [bstr.{i}] notation.
-
-    @raise Invalid_argument if [i] is not an index of [bstr]. *)
-
-val set : t -> int -> char -> unit
-(** [set t i chr] modifies [t] in place, replacing the byte at index [i] with
-    [chr].
-
-    @raise Invalid_argument if [i] is not a valid index in [t]. *)
-
-val unsafe_get : t -> int -> char
-(** [unsafe_get t idx] is like {!val:get} except no bounds checking is
-    performed. *)
-
-val unsafe_set : t -> int -> char -> unit
-(** [unsafe_set t idx chr] is like {!val:set} except no bounds checking is
-    performed. *)
-
-val chop : ?rev:bool -> t -> char option
-(** [chop bstr] returns the first element of [bstr] or the last element if
-    [rev = true]. If [bstr] is empty, it returns [None]. *)
-
-val create : int -> t
-(** [create len] returns a new byte sequence of length [len]. The sequence
-    {b is unitialized} and contains arbitrary bytes. *)
-
-val make : int -> char -> t
-(** [make len chr] is {!type:t} of length [len] with each index holding the
-    character [chr]. *)
-
-val of_string : string -> t
-(** [of_string str] returns a new {!type:t} that contains the contents of the
-    given string [str]. *)
-
-val string : ?off:int -> ?len:int -> string -> t
-(** [string ~off ~len str] is the sub-buffer of [str] that starts at position
-    [off] (defaults to [0]) and stops at position [off + len] (defaults to
-    [String.length str]). [str] is fully-replaced by a fresh allocated
-    {!type:t}.
-
-    @raise Invalid_argument
-      if [off] and [len] do not designate a valid range of [str]. *)
-
 val fill : t -> ?off:int -> ?len:int -> char -> unit
 (** [fill t off len chr] modifies [t] in place, replacing [len] characters with
     [chr], starting at [off].
 
     @raise Invalid_argument
       if [off] and [len] do not designate a valid range of [t]. *)
-
-val init : int -> (int -> char) -> t
-(** [init len fn] returns a fresh byte sequence of length [len], with character
-    [idx] initialized to the result of [fn idx] (in increasing index order). *)
-
-val copy : t -> t
-(** [copy t] returns a new byte sequence that contains the same bytes as the
-    argument. *)
-
-(** {2 Copy operation from one byte sequence to another.} *)
-
-val blit : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
-(** [blit src ~src_off dst ~dst_off ~len] copies [len] bytes from byte sequence
-    [src], starting at index [src_off], to byte sequence [dst], starting at
-    index [dst_off]. It works correctly even if [src] and [dst] are (physically)
-    the same byte sequence, and the source and destination intervals overlap.
-
-    @raise Invalid_argument
-      if [src_off] and [len] do not designate a valid range of [src], or if
-      [dst_off] and [len] do not designate a valid range of [dst]. *)
-
-val blit_from_string :
-  string -> src_off:int -> t -> dst_off:int -> len:int -> unit
-(** Just like {!val:blit}, but with a string as source one.
-
-    {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
-    is used to do the copy.
-
-    @raise Invalid_argument
-      if [src_pos] and [len] do not designate a valid range of [src], or if
-      [dst_off] and [len] do not designate a valid range of [dst]. *)
-
-val blit_from_bytes :
-  bytes -> src_off:int -> t -> dst_off:int -> len:int -> unit
-(** Just like {!val:blit}, but with a bytes as source one.
-
-    {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
-    is used to do the copy.
-
-    @raise Invalid_argument
-      if [src_pos] and [len] do not designate a valid range of [src], or if
-      [dst_off] and [len] do not designate a valid range of [dst]. *)
-
-val blit_to_bytes : t -> src_off:int -> bytes -> dst_off:int -> len:int -> unit
-(** [blit_to_bytes src ~src_off dst ~dst_off ~len] copies [len] bytes from
-    [src], starting at index [src_off], to byte sequence [dst], starting at
-    index [dst_off].
-
-    {b Note}: since it is impossible for [src] to overlap [dst], {!val:memcpy}
-    is used to do the copy.
-
-    @raise Invalid_argument
-      if [src_off] and [len] do not designate a valid range of [src], or if
-      [dst_off] and [len] do not designate a valid range of [dst]. *)
-
-(*
-val extend : t -> int -> int -> t
-val cat : t -> t -> t
-val map : (char -> char) -> t -> t
-val mapi : (int -> char -> char) -> t -> t
-val fold_left : ('acc -> char -> 'acc) -> 'acc -> t -> 'acc
-val fold_right : (char -> 'acc -> 'acc) -> t -> 'acc -> 'acc
-val index : t -> ?rev:bool -> ?from:int -> char -> int
-*)
 
 (** {2 Decode integers from a byte sequence.} *)
 
@@ -417,16 +420,7 @@ val overlap : t -> t -> (int * int * int) option
     between [x] and [y], as well as the position of [y] in [x] and the position
     of [x] in [y]. *)
 
-val sub_string : t -> off:int -> len:int -> string
-(** [sub_string bstr ~off ~len] returns a string of length [len] containing the
-    bytes of [bstr] starting at [off].
-
-    @raise Invalid_argument
-      if [off] and [len] do not designate a valid range of [t]. *)
-
-val to_string : t -> string
-(** [to_string bstr] is equivalent to
-    [sub_string bstr ~off:0 ~len:(length bstr)]. *)
+(** {2 Predicates and comparaisons.} *)
 
 val is_empty : t -> bool
 (** [is_empty bstr] is [length bstr = 0]. *)
@@ -461,14 +455,6 @@ val contains : t -> ?off:int -> ?len:int -> char -> bool
 (** [contains bstr ?off ?len chr] is [true] if and only if [chr] appears in
     [len] byte(s)'s [bstr] after position [off] (defaults to [0]). *)
 
-val index : t -> ?off:int -> ?len:int -> char -> int option
-(** [index bstr ?off ?len chr] is the index of the first occurrence of [chr] in
-    [len] byte(s)'s [bstr] after position [off] (defaults to [0]). If [chr] does
-    not occur in given range of [bstr], we return [None].
-
-    @raise Invalid_argument
-      if [off] and [len] do not designate a valid range of [bstr]. *)
-
 val equal : t -> t -> bool
 (** [equal a b] is [a = b]. *)
 
@@ -483,6 +469,24 @@ val constant_equal : t -> t -> bool
 
 val compare : t -> t -> int
 (** [compare bstr0 bstr1] sorts [bstr0] and [bstr1] in lexicographical order. *)
+
+val index : t -> ?off:int -> ?len:int -> char -> int option
+(** [index bstr ?off ?len chr] is the index of the first occurrence of [chr] in
+    [len] byte(s)'s [bstr] after position [off] (defaults to [0]). If [chr] does
+    not occur in given range of [bstr], we return [None].
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [bstr]. *)
+
+val memchr : t -> off:int -> len:int -> char -> int
+(** [memchr t ~off ~len chr] scans [len] bytes (starting at [off]) of [t] for
+    the first instance of [chr]. It returns the position in [t] where the first
+    occurrence of [chr] is found. Otherwise, it returns [-1].
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [t]. *)
+
+(** {2 Extracting substrings.} *)
 
 val with_range : ?first:int -> ?len:int -> t -> t
 (** [with_range ~first ~len bstr] are the consecutive bytes of [bstr] whose
@@ -575,9 +579,7 @@ val split_on_char : char -> t -> t list
       equal to the input.
     - no bigstring in the result contains the [sep] character. *)
 
-val concat : string -> t list -> t
-(** [concat sep ts] concatenates the list of bigstrings [ts], inserting the
-    separator string [sep] between each. *)
+(** {2 Traversing strings.} *)
 
 val iter : (char -> unit) -> t -> unit
 (** [iter fn t] applies function [fn] in turn to all the characters of [t]. It
