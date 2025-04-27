@@ -1447,6 +1447,31 @@ let test81 =
   check (constant_equal foo foo);
   check (constant_equal foo bar == false)
 
+let test82 =
+  let descr = {text|extend|text} in
+  Test.test ~title:"extend" ~descr @@ fun () ->
+  let abcde = Bstr.string "abcde" in
+  check (Bstr.extend abcde 7 (-7) |> Bstr.length == 5);
+  check (Bstr.extend abcde (-7) 7 |> Bstr.length == 5);
+  let test ~off ~len str left right =
+    let v = Bstr.extend abcde left right in
+    check
+      begin
+        Bstr.length v == len
+        && abcde != v
+        && Bstr.sub_string ~off ~len:(String.length str) v = str
+      end
+  in
+  test ~off:0 ~len:5 "abcde" 0 0;
+  test ~off:2 ~len:5 "abc" 2 (-2);
+  test ~off:0 ~len:3 "bcd" (-1) (-1);
+  test ~off:0 ~len:4 "de" (-3) 2;
+  test ~off:0 ~len:3 "abc" 0 (-2);
+  test ~off:0 ~len:3 "cde" (-2) 0;
+  test ~off:0 ~len:7 "abcde" 0 2;
+  test ~off:2 ~len:7 "abcde" 2 0;
+  test ~off:1 ~len:7 "abcde" 1 1
+
 let ( / ) = Filename.concat
 
 let () =
@@ -1461,6 +1486,7 @@ let () =
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
     ; test64; test65; test66; test67; test68; test69; test70; test71; test72
     ; test73; test74; test75; test76; test77; test78; test79; test80; test81
+    ; test82
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in

@@ -159,6 +159,14 @@ val concat : string -> t list -> t
 (** [concat sep ts] concatenates the list of bigstrings [ts], inserting the
     separator string [sep] between each. *)
 
+val extend : t -> int -> int -> t
+(** [extend bstr left right] returns a new bigstring that contains the bytes of
+    [bstr], with [left] zero bytes prepended and [right] zero byte appended to
+    it. If [left] or [right] is negative, then bytes are removed (instead of
+    appended) from the corresponding side of [bstr].
+
+    @raise Invalid_argument if the result length is negative *)
+
 (** {2 Copy operation from one byte sequence to another.} *)
 
 val blit : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
