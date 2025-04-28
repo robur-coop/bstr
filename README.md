@@ -29,7 +29,7 @@ libraries:
 |      fast `sub` |   ❌ |      ❌ |          ❌ |         ✅ |
 |     fast `blit` |   ✅ |      ❌ |          ❌ |         ✅ |
 | release GC lock |   ✅ |      ❌ |          ❌ |         ✅ |
-| fast `contains` |   ✅ |      ❌ |          ✅ |         ❌ |
+| fast `contains` |   ✅ |      ❌ |          ✅ |         ✅ |
 
 ### Fast `sub`
 
@@ -54,9 +54,9 @@ for `Bstr.t` values is equivalent.
 Here is a comparative table of the `sub` function between all implementations
 (AMD Ryzen 9 7950X 16-Core Processor):
 
-|     | bigstringaf |   bstr | cstruct | slice |
-|-----|-------------|--------|---------|-------|
-| sub |     20.0 ns | 17.8ns |   2.8ns | 2.4ns |
+|       | bigstringaf |   bstr | cstruct | slice |
+|-------|-------------|--------|---------|-------|
+| `sub` |     20.0 ns | 17.8ns |   2.8ns | 2.4ns |
 
 ### Fast `blit`
 
@@ -68,9 +68,9 @@ Here is a comparative table of the `sub` function between all implementations
 Here is a comparative table of the `blit_from_string` function between all the
 implementations:
 
-|                  | bigstringaf |  bstr | cstruct |
-|------------------|-------------|-------|---------|
-| blit_from_string |       5.1ns | 4.3ns |   4.7ns |
+|                    | bigstringaf |  bstr | cstruct |
+|--------------------|-------------|-------|---------|
+| `blit_from_string` |       5.1ns | 4.3ns |   4.7ns |
 
 #### _mmaped_ or not? (GC lock)
 

@@ -12,3 +12,8 @@
  (name b)
  (modules b)
  (libraries bin bstr test))
+
+(test
+ (name s)
+ (modules s)
+ (libraries bin slice.bstr test))

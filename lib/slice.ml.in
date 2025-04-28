@@ -1,5 +1,17 @@
 type t = S.t Slice.t
 
+external ( < ) : 'a -> 'a -> bool = "%lessthan"
+external ( <= ) : 'a -> 'a -> bool = "%lessequal"
+external ( >= ) : 'a -> 'a -> bool = "%greaterequal"
+external ( > ) : 'a -> 'a -> bool = "%greaterthan"
+
+let ( > ) (x : int) y = x > y [@@inline]
+let ( < ) (x : int) y = x < y [@@inline]
+let ( <= ) (x : int) y = x <= y [@@inline]
+let ( >= ) (x : int) y = x >= y [@@inline]
+let min (a : int) b = if a <= b then a else b [@@inline]
+let max (a : int) b = if a >= b then a else b [@@inline]
+
 open Slice
 
 let make ?(off= 0) ?len buf =
@@ -82,10 +94,19 @@ let string ?(off= 0) ?len str =
 let overlap ({ buf= buf0; _ } as a) ({ buf= buf1; _ } as b) =
   match S.overlap buf0 buf1 with
   | None -> None
-  | Some (len, 0, 0) ->
+  | Some (_, 0, 0) ->
+      let len =
+        max 0 (min (a.off + a.len) (b.off + b.len)) - max a.off b.off in
       if a.off >= b.off && a.off < b.off + b.len
-      then let offset = a.off - b.off in Some (len, 0, offset)
+      then
+        let offset = a.off - b.off in Some (len, 0, offset)
       else if b.off >= a.off && b.off < a.off + a.len
-      then let offset = b.off + a.off in Some (len, offset, 0)
+      then
+        let offset = b.off + a.off in Some (len, offset, 0)
       else None
-  | Some _ -> assert false
+  | Some _ ->
+      let a = S.sub buf0 ~off:a.off ~len:a.len
+      and b = S.sub buf1 ~off:b.off ~len:b.len in
+      S.overlap a b
+      (* TODO(dinosaure): this case appears only for bigstrings, but we could
+         optimize it and avoid [S.sub]. *)
