@@ -9,6 +9,7 @@ let test01 =
     let len = String.length str in
     Bin.encode_bstr Bin.cstring str buf pos;
     check (!pos == len + 1);
+    Format.eprintf ">>> [%d]: %02x\n%!" !pos (Bstr.get_uint8 buf !pos);
     check (Bstr.get_uint8 buf !pos == 0);
     check (Bstr.sub_string buf ~off:0 ~len = str);
     pos := 0;
