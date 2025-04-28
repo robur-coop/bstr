@@ -55,7 +55,7 @@ let runner ?(g = Random.State.make_self_init ())
 
 let run { directory= dir } { title; fn; _ } =
   let old_stderr = Unix.dup Unix.stderr in
-  let new_stderr = open_out (dir / strf "%s.stderr" title) in
+  let new_stderr = open_out_bin (dir / strf "%s.stderr" title) in
   Unix.dup2 (Unix.descr_of_out_channel new_stderr) Unix.stderr;
   let finally () =
     flush stderr;
@@ -66,7 +66,7 @@ let run { directory= dir } { title; fn; _ } =
   Format.eprintf "*** %s ***\n%!" title;
   try Fun.protect ~finally fn
   with exn ->
-    let ic = open_in (dir / strf "%s.stderr" title) in
+    let ic = open_in_bin (dir / strf "%s.stderr" title) in
     let ln = in_channel_length ic in
     let rs = Bytes.create ln in
     really_input ic rs 0 ln;
