@@ -952,6 +952,7 @@ module Bstr = struct
     let len = Stdlib.String.length src in
     off := !off + len;
     Bstr.blit_from_string src ~src_off:0 bstr ~dst_off:pos ~len;
+    Format.eprintf ">>> [%d] to 0x00\n%!" !off;
     Bstr.set_uint8 bstr !off 0;
     incr off
 
