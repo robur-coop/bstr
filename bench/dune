@@ -48,7 +48,7 @@
 
 (executable
  (name contains)
- (libraries base64 bigstringaf bstr cstruct bechamel bechamel-js))
+ (libraries slice.bstr base64 bigstringaf bstr cstruct bechamel bechamel-js))
 
 (rule
  (targets contains.json)
