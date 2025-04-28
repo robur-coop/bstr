@@ -6,14 +6,17 @@
 (test
  (name t)
  (modules t)
+ (package bstr)
  (libraries bstr test))
 
 (test
  (name b)
  (modules b)
+ (package bin)
  (libraries bin bstr test))
 
 (test
  (name s)
  (modules s)
+ (package slice)
  (libraries bin slice.bstr test))
