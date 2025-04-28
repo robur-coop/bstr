@@ -189,13 +189,21 @@ static void caml_ba_update_proxy(struct caml_ba_array *b1,
     /* If b1 is already a proxy for a larger array, increment refcount of
        proxy */
     b2->proxy = b1->proxy;
+#if OCAML_VERSION_MAJOR >= 5
     (void)atomic_fetch_add(&b1->proxy->refcount, 1);
+#else
+    b1->proxy->refcount += 1;
+#endif
   } else {
     /* Otherwise, create proxy and attach it to both b1 and b2 */
     proxy = malloc(sizeof(struct caml_ba_proxy));
     if (proxy == NULL)
       caml_raise_out_of_memory();
+#if OCAML_VERSION_MAJOR >= 5
     atomic_store_release(&proxy->refcount, 2);
+#else
+    proxy->refcount = 2;
+#endif
     /* initial refcount: 2 = original array + sub array */
     proxy->data = b1->data;
     proxy->size = b1->flags & CAML_BA_MAPPED_FILE ? caml_ba_byte_size(b1) : 0;
