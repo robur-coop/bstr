@@ -15,9 +15,5 @@ run-test: [ "dune" "runtest" "-p" name "-j" jobs ]
 depends: [
   "ocaml"       {>= "4.14.0"}
   "dune"        {>= "3.5.0"}
-  "bechamel-js" {with-test}
-  "bigstringaf" {with-test}
-  "cstruct"     {with-test}
-  "base64"      {with-test}
 ]
 x-maintenance-intent: [ "(latest)" ]

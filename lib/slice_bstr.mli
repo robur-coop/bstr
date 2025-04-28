@@ -154,7 +154,10 @@ val shift : t -> int -> t
 
 val sub_string : t -> off:int -> len:int -> string
 (** [sub_string slice ~off ~len] returns a string of length [len] containing the
-    bytes of [slice] starting at [off]. *)
+    bytes of [slice] starting at [off].
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [t]. *)
 
 val to_string : t -> string
 (** [to_string slice] is equivalent to
@@ -171,7 +174,10 @@ val string : ?off:int -> ?len:int -> string -> t
 (** [string ~off ~len str] is the sub-buffer of [str] that starts at position
     [off] (defaults to [0]) and stops at position [off + len] (defaults to
     [String.length str]). [str] is fully-replaced by a fresh allocated
-    {!type:t}. *)
+    {!type:t}.
+
+    @raise Invalid_argument
+      if [off] and [len] do not designate a valid range of [str]. *)
 
 val overlap : t -> t -> (int * int * int) option
 (** [overlap x y] returns the size (in bytes) of what is physically common

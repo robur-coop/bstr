@@ -1,9 +1,13 @@
 (executable
  (name sub)
+ (enabled_if
+  (= %{profile} benchmark))
  (libraries slice.bstr bstr cstruct bechamel bechamel-js))
 
 (rule
  (targets sub.json)
+ (enabled_if
+  (= %{profile} benchmark))
  (action
   (with-stdout-to
    %{targets}
@@ -11,15 +15,21 @@
 
 (rule
  (targets sub.html)
+ (enabled_if
+  (= %{profile} benchmark))
  (action
   (system "%{bin:bechamel-html} < %{dep:sub.json} > %{targets}")))
 
 (executable
  (name blit)
+ (enabled_if
+  (= %{profile} benchmark))
  (libraries bstr cstruct bechamel bechamel-js))
 
 (rule
  (targets blit.json)
+ (enabled_if
+  (= %{profile} benchmark))
  (action
   (with-stdout-to
    %{targets}
@@ -27,15 +37,21 @@
 
 (rule
  (targets blit.html)
+ (enabled_if
+  (= %{profile} benchmark))
  (action
   (system "%{bin:bechamel-html} < %{dep:blit.json} > %{targets}")))
 
 (executable
  (name equal)
+ (enabled_if
+  (= %{profile} benchmark))
  (libraries base64 slice.bstr bstr cstruct bigstringaf bechamel bechamel-js))
 
 (rule
  (targets equal.json)
+ (enabled_if
+  (= %{profile} benchmark))
  (action
   (with-stdout-to
    %{targets}
@@ -43,15 +59,21 @@
 
 (rule
  (targets equal.html)
+ (enabled_if
+  (= %{profile} benchmark))
  (action
   (system "%{bin:bechamel-html} < %{dep:equal.json} > %{targets}")))
 
 (executable
  (name contains)
+ (enabled_if
+  (= %{profile} benchmark))
  (libraries slice.bstr base64 bigstringaf bstr cstruct bechamel bechamel-js))
 
 (rule
  (targets contains.json)
+ (enabled_if
+  (= %{profile} benchmark))
  (action
   (with-stdout-to
    %{targets}
@@ -59,5 +81,7 @@
 
 (rule
  (targets contains.html)
+ (enabled_if
+  (= %{profile} benchmark))
  (action
   (system "%{bin:bechamel-html} < %{dep:contains.json} > %{targets}")))
