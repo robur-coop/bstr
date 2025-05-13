@@ -35,3 +35,6 @@ let string ?(off = 0) ?len str =
 
 let overlap a b = if a == b then Some (Bytes.length a, 0, 0) else None
 let sub t ~off ~len = Bytes.sub t off len
+
+let blit_from_bytes src ~src_off dst ~dst_off ~len =
+  Bytes.blit src src_off dst dst_off len

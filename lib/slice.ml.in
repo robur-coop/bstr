@@ -77,6 +77,16 @@ let blit a b =
   let len = Int.min a.len b.len in
   S.blit a.buf ~src_off:a.off b.buf ~dst_off:b.off ~len:len
 
+let blit_from_bytes src ~src_off { Slice.buf; off; _ } ?dst_off len =
+  let dst_off = match dst_off with
+    | Some dst_off -> dst_off + off
+    | None -> off in
+  if len < 0
+  || dst_off < 0
+  || dst_off > S.length buf - len
+  then invalid_arg "Slice.blit_from_bytes";
+  S.blit_from_bytes src ~src_off buf ~dst_off ~len
+
 let fill { off; len; buf; } ?off:(off'= 0) ?len:len' chr =
   let len' = match len' with
     | Some len' -> len'

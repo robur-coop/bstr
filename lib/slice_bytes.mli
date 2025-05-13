@@ -134,6 +134,8 @@ val set_int64_be : t -> int -> int64 -> unit
 val blit : t -> t -> unit
 (** [blit src dst] copies all bytes of [src] into [dst]. *)
 
+val blit_from_bytes : bytes -> src_off:int -> t -> ?dst_off:int -> int -> unit
+
 val fill : t -> ?off:int -> ?len:int -> char -> unit
 (** [fill t off len chr] modifies [t] in place, replacing [len] characters with
     [chr], starting at [off].
