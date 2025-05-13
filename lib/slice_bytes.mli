@@ -135,6 +135,7 @@ val blit : t -> t -> unit
 (** [blit src dst] copies all bytes of [src] into [dst]. *)
 
 val blit_from_bytes : bytes -> src_off:int -> t -> ?dst_off:int -> int -> unit
+val blit_to_bytes : t -> ?src_off:int -> bytes -> dst_off:int -> len:int -> unit
 
 val fill : t -> ?off:int -> ?len:int -> char -> unit
 (** [fill t off len chr] modifies [t] in place, replacing [len] characters with
