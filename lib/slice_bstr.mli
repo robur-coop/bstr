@@ -135,7 +135,21 @@ val blit : t -> t -> unit
 (** [blit src dst] copies all bytes of [src] into [dst]. *)
 
 val blit_from_bytes : bytes -> src_off:int -> t -> ?dst_off:int -> int -> unit
+(** [blit_from_bytes src ~src_off dst ~dst_off ~len] copies [len] bytes from
+    byte sequence [src], starting at index [src_off], to slice [dst], starting
+    at index [dst_off].
+
+    @raise Invalid_argument
+      if [src_off] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
+
 val blit_to_bytes : t -> ?src_off:int -> bytes -> dst_off:int -> len:int -> unit
+(** Just like {!val:blit_from_bytes}, but the source is a slice and the
+    destination is a [byte]s sequence.
+
+    @raise Invalid_argument
+      if [src_off] and [len] do not designate a valid range of [src], or if
+      [dst_off] and [len] do not designate a valid range of [dst]. *)
 
 val fill : t -> ?off:int -> ?len:int -> char -> unit
 (** [fill t off len chr] modifies [t] in place, replacing [len] characters with
