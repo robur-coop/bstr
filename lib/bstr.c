@@ -82,8 +82,9 @@ CAMLprim value bstr_bytecode_memcpy(value src, value src_off, value dst,
   CAMLreturn(Val_unit);
 }
 
-void bstr_native_memmove_mmaped(value src, intnat src_off, value dst,
-                                intnat dst_off, intnat len) {
+CAMLprim value bstr_native_memmove_mmaped(value src, intnat src_off, value dst,
+                                          intnat dst_off, intnat len) {
+  CAMLparam2(src, dst);
   int leave_runtime = (len > LEAVE_RUNTIME_OP_CUTOFF * sizeof(long)) ||
                       is_mmaped(Caml_ba_array_val(src)) ||
                       is_mmaped(Caml_ba_array_val(dst));
@@ -93,10 +94,12 @@ void bstr_native_memmove_mmaped(value src, intnat src_off, value dst,
   memmove(bstr_uint8_off(dst, dst_off), bstr_uint8_off(src, src_off), len);
   if (leave_runtime)
     caml_leave_blocking_section();
+  CAMLreturn(Val_unit);
 }
 
-void bstr_native_memmove(value src, intnat src_off, value dst, intnat dst_off,
-                         intnat len) {
+CAMLprim value bstr_native_memmove(value src, intnat src_off, value dst,
+                                   intnat dst_off, intnat len) {
+  CAMLparam2(src, dst);
   int leave_runtime = (len > LEAVE_RUNTIME_OP_CUTOFF * sizeof(long));
 
   if (leave_runtime)
@@ -104,6 +107,7 @@ void bstr_native_memmove(value src, intnat src_off, value dst, intnat dst_off,
   memmove(bstr_uint8_off(dst, dst_off), bstr_uint8_off(src, src_off), len);
   if (leave_runtime)
     caml_leave_blocking_section();
+  CAMLreturn(Val_unit);
 }
 
 CAMLprim value bstr_bytecode_memmove(value src, value src_off, value dst,
