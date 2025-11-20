@@ -1,4 +1,6 @@
 (*
+ * Copyright (c) 2015 The astring programmers
+ * SPDX-License-Identifier: ISC
  * Copyright (c) 2024 Romain Calascibetta <romain.calascibetta@gmail.com>
  *
  * Permission to use, copy, modify, and distribute this software for any
