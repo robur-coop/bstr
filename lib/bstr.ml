@@ -109,7 +109,6 @@ external unsafe_memcpy :
 external unsafe_memcpy_mmaped :
   t -> (int[@untagged]) -> t -> (int[@untagged]) -> (int[@untagged]) -> unit
   = "bstr_bytecode_memcpy" "bstr_native_memcpy_mmaped"
-[@@noalloc]
 
 external unsafe_memmove :
   t -> (int[@untagged]) -> t -> (int[@untagged]) -> (int[@untagged]) -> unit
@@ -119,7 +118,6 @@ external unsafe_memmove :
 external unsafe_memmove_mmaped :
   t -> (int[@untagged]) -> t -> (int[@untagged]) -> (int[@untagged]) -> unit
   = "bstr_bytecode_memmove" "bstr_native_memmove_mmaped"
-[@@noalloc]
 
 external unsafe_memchr :
      t
