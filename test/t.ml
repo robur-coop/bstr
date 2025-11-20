@@ -1464,6 +1464,56 @@ let test82 =
   test ~off:2 ~len:7 "abcde" 2 0;
   test ~off:1 ~len:7 "abcde" 1 1
 
+let test83 =
+  let descr = {text|cuts|text} in
+  Test.test ~title:"cuts" ~descr @@ fun () ->
+  let err v =
+    match Lazy.force v with
+    | exception Invalid_argument _ -> check true
+    | _ -> check false
+  in
+  let _123 = Bstr.string "123" in
+  let abcd = Bstr.string "abcd" in
+  lazy (Bstr.cuts ~sep:"" Bstr.empty) |> err;
+  lazy (Bstr.cuts ~rev:true ~sep:"" Bstr.empty) |> err;
+  lazy (Bstr.cuts ~sep:"" _123) |> err;
+  lazy (Bstr.cuts ~rev:true ~sep:"" _123) |> err;
+  check (List.hd (Bstr.cuts ~sep:"," Bstr.empty) == Bstr.empty);
+  check (List.hd (Bstr.cuts ~rev:true ~sep:"," Bstr.empty) == Bstr.empty);
+  check (List.hd (Bstr.cuts ~sep:"," abcd) == abcd);
+  check (List.hd (Bstr.cuts ~rev:true ~sep:"," abcd) == abcd);
+  let eql a b =
+    try
+      let res = List.for_all2 Bstr.equal a b in
+      check res
+    with _ -> check false
+  in
+  let sep = "," in
+  let s = Bstr.string in
+  let e = Bstr.empty in
+  eql (Bstr.cuts ~empty:true ~sep e) [ e ];
+  eql (Bstr.cuts ~empty:false ~sep e) [];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep e) [ e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep e) [];
+  eql (Bstr.cuts ~empty:true ~sep (s ",")) [ e; e ];
+  eql (Bstr.cuts ~empty:false ~sep (s ",")) [];
+  eql (Bstr.cuts ~empty:true ~sep (s ",,")) [ e; e; e ];
+  eql (Bstr.cuts ~empty:false ~sep (s ",,")) [];
+  eql (Bstr.cuts ~empty:true ~sep (s ",,,")) [ e; e; e; e ];
+  eql (Bstr.cuts ~empty:false ~sep (s ",,,")) [];
+  eql (Bstr.cuts ~empty:true ~sep (s "123")) [ s "123" ];
+  eql (Bstr.cuts ~empty:false ~sep (s "123")) [ s "123" ];
+  eql (Bstr.cuts ~empty:true ~sep (s ",123")) [ e; s "123" ];
+  eql (Bstr.cuts ~empty:false ~sep (s ",123")) [ s "123" ];
+  eql (Bstr.cuts ~empty:true ~sep (s "123,")) [ s "123"; e ];
+  eql (Bstr.cuts ~empty:false ~sep (s "123,")) [ s "123" ];
+  eql (Bstr.cuts ~empty:true ~sep (s "1,2,3")) [ s "1"; s "2"; s "3" ];
+  eql (Bstr.cuts ~empty:false ~sep (s "1,2,3")) [ s "1"; s "2"; s "3" ];
+  eql (Bstr.cuts ~empty:true ~sep (s "1, 2, 3")) [ s "1"; s " 2"; s " 3" ];
+  eql
+    (Bstr.cuts ~empty:true ~sep (s ",1,2,,3,"))
+    [ e; s "1"; s "2"; e; s "3"; e ]
+
 let ( / ) = Filename.concat
 
 let () =
@@ -1478,7 +1528,7 @@ let () =
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
     ; test64; test65; test66; test67; test68; test69; test70; test71; test72
     ; test73; test74; test75; test76; test77; test78; test79; test80; test81
-    ; test82
+    ; test82; test83
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in
