@@ -30,21 +30,19 @@ let test04 =
   Test.test ~title:"negative shift" ~descr @@ fun () ->
   let x = Bstr.create 2 in
   let y = Bstr.sub x ~off:1 ~len:1 in
-  begin
-    try
-      let _ = Bstr.shift x (-1) in
-      check false
-    with
-    | Invalid_argument _ -> check true
-    | _exn -> check false
+  begin try
+    let _ = Bstr.shift x (-1) in
+    check false
+  with
+  | Invalid_argument _ -> check true
+  | _exn -> check false
   end;
-  begin
-    try
-      let _ = Bstr.shift y (-1) in
-      check false
-    with
-    | Invalid_argument _ -> check true
-    | _exn -> check false
+  begin try
+    let _ = Bstr.shift y (-1) in
+    check false
+  with
+  | Invalid_argument _ -> check true
+  | _exn -> check false
   end
 
 let test05 =
@@ -61,20 +59,18 @@ let test06 =
   Test.test ~title:"sub" ~descr @@ fun () ->
   let x = Bstr.create 100 in
   let y = Bstr.sub x ~off:10 ~len:80 in
-  begin
-    match Bstr.overlap x y with
-    | Some (len, x_off, _) ->
-        check (len = 80);
-        check (x_off = 10)
-    | None -> check false
+  begin match Bstr.overlap x y with
+  | Some (len, x_off, _) ->
+      check (len = 80);
+      check (x_off = 10)
+  | None -> check false
   end;
   let z = Bstr.sub y ~off:20 ~len:60 in
-  begin
-    match Bstr.overlap x z with
-    | Some (len, x_off, _) ->
-        check (len = 60);
-        check (x_off = 30)
-    | None -> check false
+  begin match Bstr.overlap x z with
+  | Some (len, x_off, _) ->
+      check (len = 60);
+      check (x_off = 30)
+  | None -> check false
   end
 
 let test07 =
@@ -82,21 +78,19 @@ let test07 =
   Test.test ~title:"negative sub" ~descr @@ fun () ->
   let x = Bstr.create 2 in
   let y = Bstr.sub ~off:1 ~len:1 x in
-  begin
-    try
-      let _ = Bstr.sub x ~off:(-1) ~len:0 in
-      check false
-    with
-    | Invalid_argument _ -> check true
-    | _exn -> check false
+  begin try
+    let _ = Bstr.sub x ~off:(-1) ~len:0 in
+    check false
+  with
+  | Invalid_argument _ -> check true
+  | _exn -> check false
   end;
-  begin
-    try
-      let _ = Bstr.sub y ~off:(-1) ~len:0 in
-      check false
-    with
-    | Invalid_argument _ -> check true
-    | _exn -> check false
+  begin try
+    let _ = Bstr.sub y ~off:(-1) ~len:0 in
+    check false
+  with
+  | Invalid_argument _ -> check true
+  | _exn -> check false
   end
 
 let test08 =
@@ -125,22 +119,20 @@ let test10 =
   let descr = {text|sub offset too big|text} in
   Test.test ~title:"sub offset too big" ~descr @@ fun () ->
   let x = Bstr.create 10 in
-  begin
-    try
-      let _ = Bstr.sub x ~off:11 ~len:0 in
-      check false
-    with
-    | Invalid_argument _ -> check true
-    | _exn -> check false
+  begin try
+    let _ = Bstr.sub x ~off:11 ~len:0 in
+    check false
+  with
+  | Invalid_argument _ -> check true
+  | _exn -> check false
   end;
   let y = Bstr.sub x ~off:1 ~len:9 in
-  begin
-    try
-      let _ = Bstr.sub y ~off:10 ~len:0 in
-      check false
-    with
-    | Invalid_argument _ -> check true
-    | _exn -> check false
+  begin try
+    let _ = Bstr.sub y ~off:10 ~len:0 in
+    check false
+  with
+  | Invalid_argument _ -> check true
+  | _exn -> check false
   end
 
 let test11 =
