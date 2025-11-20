@@ -690,6 +690,57 @@ let rcut ~sep bstr =
 let cut ?(rev = false) ~sep bstr =
   match rev with true -> rcut ~sep bstr | false -> fcut ~sep bstr
 
+let add_sub ~no_empty bstr ~start ~stop acc =
+  if start = stop then if no_empty then acc else empty :: acc
+  else unsafe_sub bstr start (stop - start) :: acc
+
+let fcuts ~no_empty ~sep bstr =
+  let sep_len = String.length sep in
+  if sep_len = 0 then invalid_arg "cuts: empty separator";
+  let bstr_len = length bstr in
+  let max_sep_idx = sep_len - 1 in
+  let max_bstr_idx = bstr_len - sep_len in
+  let rec check_sep start i k acc =
+    if k > max_sep_idx then
+      let new_start = i + sep_len in
+      scan new_start new_start (add_sub ~no_empty bstr ~start ~stop:i acc)
+    else if unsafe_get bstr (i + k) = sep.[k] then check_sep start i (k + 1) acc
+    else scan start (i + 1) acc
+  and scan start i acc =
+    if i > max_bstr_idx then
+      if start = 0 then if no_empty && bstr_len = 0 then [] else [ bstr ]
+      else List.rev (add_sub ~no_empty bstr ~start ~stop:bstr_len acc)
+    else if unsafe_get bstr i = sep.[0] then check_sep start i 1 acc
+    else scan start (i + 1) acc
+  in
+  scan 0 0 []
+
+let rcuts ~no_empty ~sep bstr =
+  let sep_len = String.length sep in
+  if sep_len = 0 then invalid_arg "cuts: empty separtor";
+  let bstr_len = length bstr in
+  let max_sep_idx = sep_len - 1 in
+  let max_bstr_idx = bstr_len - 1 in
+  let rec check_sep stop i k acc =
+    if k > max_sep_idx then
+      let start = i + sep_len in
+      rscan i (i - sep_len) (add_sub ~no_empty bstr ~start ~stop acc)
+    else if unsafe_get bstr (i + k) = sep.[k] then check_sep stop i (k + 1) acc
+    else rscan stop (i - 1) acc
+  and rscan stop i acc =
+    if i < 0 then
+      if stop = bstr_len then if no_empty && bstr_len = 0 then [] else [ bstr ]
+      else add_sub ~no_empty bstr ~start:0 ~stop acc
+    else if unsafe_get bstr i = sep.[0] then check_sep stop i 1 acc
+    else rscan stop (i - 1) acc
+  in
+  rscan bstr_len (max_bstr_idx - max_sep_idx) []
+
+let cuts ?(rev = false) ?(empty = true) ~sep bstr =
+  match rev with
+  | true -> rcuts ~no_empty:(not empty) ~sep bstr
+  | false -> fcuts ~no_empty:(not empty) ~sep bstr
+
 let shift bstr off =
   if off > length bstr || off < 0 then invalid_arg "Bstr.shift";
   let len = length bstr - off in
