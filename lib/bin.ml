@@ -362,11 +362,10 @@ module Size = struct
             | _, { of_value= Dynamic _; _ } -> None
             | tag_len, { of_value= Static arg_len; _ } ->
                 let len = tag_len + arg_len in
-                begin
-                  match static_so_far with
-                  | None -> go (Some len) (i - 1)
-                  | Some len' when len = len' -> go static_so_far (i - 1)
-                  | Some _ -> None
+                begin match static_so_far with
+                | None -> go (Some len) (i - 1)
+                | Some len' when len = len' -> go static_so_far (i - 1)
+                | Some _ -> None
                 end
           end
       in
