@@ -576,6 +576,24 @@ val cut : ?rev:bool -> sep:string -> t -> (t * t) option
 
     @raise Invalid_argument if [sep] is the empty buffer. *)
 
+val cuts : ?rev:bool -> ?empty:bool -> sep:string -> t -> t list
+(** [cuts sep bstr] is the list of all subbigstrings of [bstr] that are
+    delimited by matches of the non empty separator string [sep]. Empty
+    subbigstrings are omitted in the list if [empty] is [false] (defaults to
+    [true]).
+
+    Matching separators in [bstr] starts from the beginning of [bstr] ([rev] is
+    [false], default) or the end ([rev] is [true]). Once one is found, the
+    separator is skipped and matching starts again, that is separator matches
+    can't overlap. If there is no separator match in [bstr], the list [[bstr]]
+    is returned.
+
+    The following invariants hold:
+    - [equal (concat (of_string sep) (cuts ~empty:true ~sep bstr)) bstr]
+    - [cuts ~empty:true ~sep bstr <> []]
+
+    @raise Invalid_argument if [sep] is the empty string. *)
+
 val split_on_char : char -> t -> t list
 (** [split_on_char sep t] is the list of all (possibly empty)
     {!val:sub}-bigstrings of [t] that are delimited by the character [sep]. If
