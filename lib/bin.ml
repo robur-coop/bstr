@@ -475,16 +475,16 @@ module Bytes = struct
     off := !off + 4;
     match endian with
     | Big_endian -> Bytes.set_int32_be buf pos value
-    | Little_endian -> Bytes.set_int32_be buf pos value
-    | Native_endian -> Bytes.set_int32_be buf pos value
+    | Little_endian -> Bytes.set_int32_le buf pos value
+    | Native_endian -> Bytes.set_int32_ne buf pos value
 
   let encode_int64 endian value buf off =
     let pos = !off in
     off := !off + 8;
     match endian with
     | Big_endian -> Bytes.set_int64_be buf pos value
-    | Little_endian -> Bytes.set_int64_be buf pos value
-    | Native_endian -> Bytes.set_int64_be buf pos value
+    | Little_endian -> Bytes.set_int64_le buf pos value
+    | Native_endian -> Bytes.set_int64_ne buf pos value
 
   let encode_bytes len src buf off =
     let pos = !off in
@@ -927,16 +927,16 @@ module Bstr = struct
     off := !off + 4;
     match endian with
     | Big_endian -> Bstr.set_int32_be bstr pos value
-    | Little_endian -> Bstr.set_int32_be bstr pos value
-    | Native_endian -> Bstr.set_int32_be bstr pos value
+    | Little_endian -> Bstr.set_int32_le bstr pos value
+    | Native_endian -> Bstr.set_int32_ne bstr pos value
 
   let encode_int64 endian value bstr off =
     let pos = !off in
     off := !off + 8;
     match endian with
     | Big_endian -> Bstr.set_int64_be bstr pos value
-    | Little_endian -> Bstr.set_int64_be bstr pos value
-    | Native_endian -> Bstr.set_int64_be bstr pos value
+    | Little_endian -> Bstr.set_int64_le bstr pos value
+    | Native_endian -> Bstr.set_int64_ne bstr pos value
 
   let encode_bytes len src bstr off =
     let dst_off = !off in
