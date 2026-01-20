@@ -52,7 +52,7 @@ intnat bstr_native_ptr(value va) {
 #define is_mmaped(ba) ((ba)->flags & CAML_BA_MAPPED_FILE)
 
 void bstr_native_memcpy_mmaped(value src, intnat src_off, value dst,
-                               intnat dst_off, intnat len) {
+                               intnat dst_off, uintnat len) {
   int leave_runtime = (len > LEAVE_RUNTIME_OP_CUTOFF * sizeof(long));
 
   if (leave_runtime)
@@ -83,7 +83,7 @@ CAMLprim value bstr_bytecode_memcpy(value src, value src_off, value dst,
 }
 
 CAMLprim value bstr_native_memmove_mmaped(value src, intnat src_off, value dst,
-                                          intnat dst_off, intnat len) {
+                                          intnat dst_off, uintnat len) {
   CAMLparam2(src, dst);
   int leave_runtime = (len > LEAVE_RUNTIME_OP_CUTOFF * sizeof(long)) ||
                       is_mmaped(Caml_ba_array_val(src)) ||
@@ -97,8 +97,8 @@ CAMLprim value bstr_native_memmove_mmaped(value src, intnat src_off, value dst,
   CAMLreturn(Val_unit);
 }
 
-CAMLprim value bstr_native_memmove(value src, intnat src_off, value dst,
-                                   intnat dst_off, intnat len) {
+void bstr_native_memmove(value src, intnat src_off, value dst, intnat dst_off,
+                         intnat len) {
   memmove(bstr_uint8_off(dst, dst_off), bstr_uint8_off(src, src_off), len);
 }
 
@@ -228,7 +228,7 @@ CAMLprim value bstr_native_unsafe_sub(value vbstr, intnat off, intnat len) {
   CAMLparam1(vbstr);
   CAMLlocal1(res);
 
-  char *sub = Caml_ba_array_val(vbstr)->data + off;
+  char *sub = (char *)Caml_ba_array_val(vbstr)->data + off * sizeof(char);
   res =
       caml_alloc_custom_mem(&caml_ba_ops, SIZEOF_BA_ARRAY + sizeof(intnat), 0);
   struct caml_ba_array *new;
@@ -249,7 +249,7 @@ CAMLprim value bstr_bytecode_unsafe_sub(value vbstr, value voff, value vlen) {
 
   intnat off = Unsigned_long_val(voff);
   intnat len = Unsigned_long_val(vlen);
-  char *sub = Caml_ba_array_val(vbstr)->data + off;
+  char *sub = (char *)Caml_ba_array_val(vbstr)->data + off * sizeof(char);
   res =
       caml_alloc_custom_mem(&caml_ba_ops, SIZEOF_BA_ARRAY + sizeof(intnat), 0);
   struct caml_ba_array *new;
@@ -278,7 +278,7 @@ uint64_t bstr_native_get64u(value va, intnat off) {
   uint64_t res;
 
 #ifdef ARCH_ALIGN_INT64
-  if (!((size_t)addr) & 0x7)
+  if (!((size_t)addr & 0x7))
     res = *((uint64_t *)addr);
   else {
     b0 = ((unsigned char *)a->data)[off];
