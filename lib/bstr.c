@@ -278,7 +278,7 @@ uint64_t bstr_native_get64u(value va, intnat off) {
   uint64_t res;
 
 #ifdef ARCH_ALIGN_INT64
-  if (!((size_t)addr) & 0x7)
+  if (!((size_t)addr & 0x7))
     res = *((uint64_t *)addr);
   else {
     b0 = ((unsigned char *)a->data)[off];
