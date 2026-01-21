@@ -1,3 +1,9 @@
+### v0.0.4 (2025-01-20)
+
+- Fix compilation of our C stubs (spotted by @hannesm, fixed by @dinosaure, [#10][10])
+
+[10]: https://git.robur.coop/robur/bstr/pulls/10
+
 ### v0.0.3 (2025-11-20)
 
 - Fix SIGSEGV when we use `memmove` (retry) (@dinosaure, [#4][4])
