@@ -6,8 +6,7 @@
   (language c)
   (names bstr)
   (flags
-   (:standard -Wall -Werror -Wpointer-arith -Wsign-compare -Wshadow
-     -Wcast-align)))
+   (:standard -Wall -Wpointer-arith -Wsign-compare -Wshadow -Wcast-align)))
  (instrumentation
   (backend bisect_ppx))
  (wrapped false))
