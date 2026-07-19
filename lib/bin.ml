@@ -14,6 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
+[@@@warning "-unused-field"]
+
 module Witness = struct
   type (_, _) eq = Refl : ('a, 'a) eq
   type _ equality = ..
@@ -328,7 +330,9 @@ module Size = struct
   and variant : type a. a variant -> a Sizer.t =
    fun v ->
     let static_varint_size n =
-      let[@warning "-8"] (Dynamic fn) = sizer_varint.Sizer.of_value in
+      let[@warning "-partial-match"] (Dynamic fn) =
+        sizer_varint.Sizer.of_value
+      in
       fn n
     in
     let case_lengths : (int * a Sizer.t) array =
