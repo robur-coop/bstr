@@ -360,8 +360,8 @@ module Size = struct
     let non_dynamic_length =
       let rec go static_so_far = function
         | -1 -> Option.map Sizer.static static_so_far
-        | i -> begin
-            match case_lengths.(i) with
+        | i ->
+            begin match case_lengths.(i) with
             | _, { of_value= Unknown; _ } -> Some Sizer.unknown
             | _, { of_value= Dynamic _; _ } -> None
             | tag_len, { of_value= Static arg_len; _ } ->
@@ -371,7 +371,7 @@ module Size = struct
                 | Some len' when len = len' -> go static_so_far (i - 1)
                 | Some _ -> None
                 end
-          end
+            end
       in
       go None (Array.length case_lengths - 1)
     in
@@ -425,16 +425,18 @@ let fold_variant : type a r. (a, r) Case_folder.t -> a variant -> a -> r =
   in
   fun v ->
     match v_typ.vget v with
-    | CV0 { ctag0; _ } -> begin
-        match cases.(ctag0) with Dispatch.Base x -> x | _ -> assert false
-      end
-    | CV1 ({ ctag1; cwitn1; _ }, v) -> begin
-        match cases.(ctag1) with
+    | CV0 { ctag0; _ } ->
+        begin match cases.(ctag0) with
+        | Dispatch.Base x -> x
+        | _ -> assert false
+        end
+    | CV1 ({ ctag1; cwitn1; _ }, v) ->
+        begin match cases.(ctag1) with
         | Dispatch.Arrow { fn; arg_wit } ->
             let v = Witness.cast_exn cwitn1 arg_wit v in
             fn v
         | _ -> assert false
-      end
+        end
 
 module Bytes = struct
   type 'a encoder = 'a -> bytes -> int ref -> unit

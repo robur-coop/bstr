@@ -408,15 +408,14 @@ val set_int64_be : t -> int -> int64 -> unit
 
 (** {2 Decode and encode integers without bounds checking.}
 
-    These are the [get_*]/[set_*] functions above with the bounds check
-    removed. These functions can be effective if it has been verified in
-    advance that the requested positions are accessible.
+    These are the [get_*]/[set_*] functions above with the bounds check removed.
+    These functions can be effective if it has been verified in advance that the
+    requested positions are accessible.
 
-    {b Warning} These functions do not check that the accessed range lies
-    within the bigstring. Reading or writing out of bounds is undefined
-    behaviour: it may silently return garbage, corrupt unrelated memory or
-    crash the program. Use the checked variants unless you have proved the
-    bound yourself. *)
+    {b Warning} These functions do not check that the accessed range lies within
+    the bigstring. Reading or writing out of bounds is undefined behaviour: it
+    may silently return garbage, corrupt unrelated memory or crash the program.
+    Use the checked variants unless you have proved the bound yourself. *)
 
 val unsafe_get_int8 : t -> int -> int
 val unsafe_get_uint8 : t -> int -> int
@@ -579,7 +578,7 @@ val take : ?rev:bool -> ?min:int -> ?max:int -> ?sat:(char -> bool) -> t -> t
     remaining one. In other words:
 
     {[
-      (if rev then snd else fst) (span ~rev ~min ~max ~sat bstr)
+    (if rev then snd else fst) (span ~rev ~min ~max ~sat bstr)
     ]} *)
 
 val drop : ?rev:bool -> ?min:int -> ?max:int -> ?sat:(char -> bool) -> t -> t
@@ -587,7 +586,7 @@ val drop : ?rev:bool -> ?min:int -> ?max:int -> ?sat:(char -> bool) -> t -> t
     matching span. In other words:
 
     {[
-      (if rev then fst else snd) (span ~rev ~min ~max ~sat bstr)
+    (if rev then fst else snd) (span ~rev ~min ~max ~sat bstr)
     ]} *)
 
 val cut : ?rev:bool -> sep:string -> t -> (t * t) option
