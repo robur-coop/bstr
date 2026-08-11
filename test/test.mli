@@ -6,3 +6,4 @@ val check : bool -> unit
 val test : title:string -> descr:string -> (unit -> unit) -> t
 val runner : ?g:Random.State.t -> ?fmt:(string, string) str -> string -> runner
 val run : runner -> t -> unit
+val failwithf : ('a, Format.formatter, unit, 'b) format4 -> 'a

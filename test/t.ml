@@ -1514,6 +1514,60 @@ let test83 =
     (Bstr.cuts ~empty:true ~sep (s ",1,2,,3,"))
     [ e; s "1"; s "2"; e; s "3"; e ]
 
+let test84 =
+  let descr = {text|unsafe accessors and checked ones|text} in
+  Test.test ~title:"unsafe" ~descr @@ fun () ->
+  let len = 64 in
+  let bstr = Bstr.init len (fun i -> Char.chr ((i * 37) land 0xff)) in
+  let get name width safe unsafe =
+    for i = 0 to len - width do
+      if safe bstr i <> unsafe bstr i then
+        failwithf "%s at %d" name i
+    done
+  in
+  get "uint8" 1 Bstr.get_uint8 Bstr.unsafe_get_uint8;
+  get "int8" 1 Bstr.get_int8 Bstr.unsafe_get_int8;
+  get "uint16_ne" 2 Bstr.get_uint16_ne Bstr.unsafe_get_uint16_ne;
+  get "uint16_le" 2 Bstr.get_uint16_le Bstr.unsafe_get_uint16_le;
+  get "uint16_be" 2 Bstr.get_uint16_be Bstr.unsafe_get_uint16_be;
+  get "int16_ne" 2 Bstr.get_int16_ne Bstr.unsafe_get_int16_ne;
+  get "int16_le" 2 Bstr.get_int16_le Bstr.unsafe_get_int16_le;
+  get "int16_be" 2 Bstr.get_int16_be Bstr.unsafe_get_int16_be;
+  get "int32_ne" 4 Bstr.get_int32_ne Bstr.unsafe_get_int32_ne;
+  get "int32_le" 4 Bstr.get_int32_le Bstr.unsafe_get_int32_le;
+  get "int32_be" 4 Bstr.get_int32_be Bstr.unsafe_get_int32_be;
+  get "int64_ne" 8 Bstr.get_int64_ne Bstr.unsafe_get_int64_ne;
+  get "int64_le" 8 Bstr.get_int64_le Bstr.unsafe_get_int64_le;
+  get "int64_be" 8 Bstr.get_int64_be Bstr.unsafe_get_int64_be;
+  check true;
+  let set : type a. string -> int -> (Bstr.t -> int -> a -> unit) ->
+      (Bstr.t -> int -> a -> unit) -> a -> unit =
+   fun name width safe unsafe v ->
+    let a = Bstr.create len and b = Bstr.create len in
+    for i = 0 to len - width do
+      Bstr.fill a '\x00';
+      Bstr.fill b '\x00';
+      safe a i v;
+      unsafe b i v;
+      if not (Bstr.equal a b) then failwithf "%s at %d" name i
+    done
+  in
+  set "uint8" 1 Bstr.set_uint8 Bstr.unsafe_set_uint8 0xa5;
+  set "int8" 1 Bstr.set_int8 Bstr.unsafe_set_int8 0xa5;
+  set "uint16_ne" 2 Bstr.set_uint16_ne Bstr.unsafe_set_uint16_ne 0x1234;
+  set "uint16_le" 2 Bstr.set_uint16_le Bstr.unsafe_set_uint16_le 0x1234;
+  set "uint16_be" 2 Bstr.set_uint16_be Bstr.unsafe_set_uint16_be 0x1234;
+  set "int16_ne" 2 Bstr.set_int16_ne Bstr.unsafe_set_int16_ne 0x1234;
+  set "int16_le" 2 Bstr.set_int16_le Bstr.unsafe_set_int16_le 0x1234;
+  set "int16_be" 2 Bstr.set_int16_be Bstr.unsafe_set_int16_be 0x1234;
+  set "int32_ne" 4 Bstr.set_int32_ne Bstr.unsafe_set_int32_ne 0x12345678l;
+  set "int32_le" 4 Bstr.set_int32_le Bstr.unsafe_set_int32_le 0x12345678l;
+  set "int32_be" 4 Bstr.set_int32_be Bstr.unsafe_set_int32_be 0x12345678l;
+  set "int64_ne" 8 Bstr.set_int64_ne Bstr.unsafe_set_int64_ne 0x123456789abcdefL;
+  set "int64_le" 8 Bstr.set_int64_le Bstr.unsafe_set_int64_le 0x123456789abcdefL;
+  set "int64_be" 8 Bstr.set_int64_be Bstr.unsafe_set_int64_be 0x123456789abcdefL;
+  check true
+
 let ( / ) = Filename.concat
 
 let () =
@@ -1528,7 +1582,7 @@ let () =
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
     ; test64; test65; test66; test67; test68; test69; test70; test71; test72
     ; test73; test74; test75; test76; test77; test78; test79; test80; test81
-    ; test82; test83
+    ; test82; test83; test84
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in

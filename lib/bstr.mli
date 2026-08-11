@@ -406,6 +406,47 @@ val set_int64_be : t -> int -> int64 -> unit
 (** [set_int32_ne t i v] sets [t]'s big-endian 64-bit integer starting at byte
     index [i] to [v]. *)
 
+(** {2 Decode and encode integers without bounds checking.}
+
+    These are the [get_*]/[set_*] functions above with the bounds check
+    removed. These functions can be effective if it has been verified in
+    advance that the requested positions are accessible.
+
+    {b Warning} These functions do not check that the accessed range lies
+    within the bigstring. Reading or writing out of bounds is undefined
+    behaviour: it may silently return garbage, corrupt unrelated memory or
+    crash the program. Use the checked variants unless you have proved the
+    bound yourself. *)
+
+val unsafe_get_int8 : t -> int -> int
+val unsafe_get_uint8 : t -> int -> int
+val unsafe_get_uint16_ne : t -> int -> int
+val unsafe_get_uint16_le : t -> int -> int
+val unsafe_get_uint16_be : t -> int -> int
+val unsafe_get_int16_ne : t -> int -> int
+val unsafe_get_int16_le : t -> int -> int
+val unsafe_get_int16_be : t -> int -> int
+val unsafe_get_int32_ne : t -> int -> int32
+val unsafe_get_int32_le : t -> int -> int32
+val unsafe_get_int32_be : t -> int -> int32
+val unsafe_get_int64_ne : t -> int -> int64
+val unsafe_get_int64_le : t -> int -> int64
+val unsafe_get_int64_be : t -> int -> int64
+val unsafe_set_int8 : t -> int -> int -> unit
+val unsafe_set_uint8 : t -> int -> int -> unit
+val unsafe_set_uint16_ne : t -> int -> int -> unit
+val unsafe_set_uint16_le : t -> int -> int -> unit
+val unsafe_set_uint16_be : t -> int -> int -> unit
+val unsafe_set_int16_ne : t -> int -> int -> unit
+val unsafe_set_int16_le : t -> int -> int -> unit
+val unsafe_set_int16_be : t -> int -> int -> unit
+val unsafe_set_int32_ne : t -> int -> int32 -> unit
+val unsafe_set_int32_le : t -> int -> int32 -> unit
+val unsafe_set_int32_be : t -> int -> int32 -> unit
+val unsafe_set_int64_ne : t -> int -> int64 -> unit
+val unsafe_set_int64_le : t -> int -> int64 -> unit
+val unsafe_set_int64_be : t -> int -> int64 -> unit
+
 val sub : t -> off:int -> len:int -> t
 (** [sub bstr ~off ~len] does not allocate a bigstring, but instead returns a
     new view into [bstr] starting at [off], and with length [len].
