@@ -48,7 +48,7 @@
  (name bin)
  (modules bin)
  (public_name bin)
- (libraries bstr slice)
+ (libraries bstr)
  (instrumentation
   (backend bisect_ppx))
  (wrapped false))
