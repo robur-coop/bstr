@@ -41,26 +41,26 @@
     an OCaml value such as a record or a variant.
 
     {[
-      open Bin
+    open Bin
 
-      type cmdline = {
-          id: int32
-        ; value_len: int32
-        ; param_len: int32
-        ; cmdline: string
-      }
+    type cmdline = {
+        id: int32
+      ; value_len: int32
+      ; param_len: int32
+      ; cmdline: string
+    }
 
-      let cmdline =
-        record (fun id value_len param_len -> { id; value_len; param_len })
-        |+ field neint32 (Fun.const 0x00050001l)
-        |+ field neint32 (fun t -> t.value_len)
-        |+ field neint32 (fun t -> t.param_len)
-        |+ field cstring (fun t -> t.cmdline)
-        |> sealr
+    let cmdline =
+      record (fun id value_len param_len -> { id; value_len; param_len })
+      |+ field neint32 (Fun.const 0x00050001l)
+      |+ field neint32 (fun t -> t.value_len)
+      |+ field neint32 (fun t -> t.param_len)
+      |+ field cstring (fun t -> t.cmdline)
+      |> sealr
 
-      let encode_into tags ?(off = 0) value =
-        let off = ref off in
-        Bin.encode_bstr cmdline value tags off (* inject *)
+    let encode_into tags ?(off = 0) value =
+      let off = ref off in
+      Bin.encode_bstr cmdline value tags off (* inject *)
     ]}
 
     Of course, it's not as fast as what we can do in C, but [Bin] has the
@@ -179,9 +179,9 @@ val field : 'a t -> ('b -> 'a) -> ('b, 'a) field
     getter [g]. For instance:
 
     {[
-      type t = { foo: string }
+    type t = { foo: string }
 
-      let foo = field cstring (fun t -> t.foo)
+    let foo = field cstring (fun t -> t.foo)
     ]} *)
 
 val ( |+ ) :
@@ -194,13 +194,13 @@ val sealr : ('a, 'b, 'a) open_record -> 'a t
 (** {2:variants Variants.}
 
     {[
-      type t = Foo | Bar of string
+    type t = Foo | Bar of string
 
-      let t =
-        variant (fun foo bar -> function Foo -> foo | Bar s -> bar s)
-        |~ case0 Foo
-        |~ case1 cstring (fun x -> Bar x)
-        |> sealv
+    let t =
+      variant (fun foo bar -> function Foo -> foo | Bar s -> bar s)
+      |~ case0 Foo
+      |~ case1 cstring (fun x -> Bar x)
+      |> sealv
     ]} *)
 
 type ('a, 'b, 'c) open_variant
@@ -227,9 +227,9 @@ val case0 : 'a -> ('a, 'a case_p) case
     arguments. For instance:
 
     {[
-      type t = Foo
+    type t = Foo
 
-      let foo = case0 Foo
+    let foo = case0 Foo
     ]} *)
 
 val case1 : 'b t -> ('b -> 'a) -> ('a, 'b -> 'a case_p) case
@@ -237,9 +237,9 @@ val case1 : 'b t -> ('b -> 'a) -> ('a, 'b -> 'a case_p) case
     argument of type [t]. For instances:
 
     {[
-      type t = Foo of string
+    type t = Foo of string
 
-      let foo = case1 cstring (fun s -> Foo s)
+    let foo = case1 cstring (fun s -> Foo s)
     ]} *)
 
 val ( |~ ) :

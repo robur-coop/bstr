@@ -1518,11 +1518,10 @@ let test84 =
   let descr = {text|unsafe accessors and checked ones|text} in
   Test.test ~title:"unsafe" ~descr @@ fun () ->
   let len = 64 in
-  let bstr = Bstr.init len (fun i -> Char.chr ((i * 37) land 0xff)) in
+  let bstr = Bstr.init len (fun i -> Char.chr (i * 37 land 0xff)) in
   let get name width safe unsafe =
     for i = 0 to len - width do
-      if safe bstr i <> unsafe bstr i then
-        failwithf "%s at %d" name i
+      if safe bstr i <> unsafe bstr i then failwithf "%s at %d" name i
     done
   in
   get "uint8" 1 Bstr.get_uint8 Bstr.unsafe_get_uint8;
@@ -1540,8 +1539,13 @@ let test84 =
   get "int64_le" 8 Bstr.get_int64_le Bstr.unsafe_get_int64_le;
   get "int64_be" 8 Bstr.get_int64_be Bstr.unsafe_get_int64_be;
   check true;
-  let set : type a. string -> int -> (Bstr.t -> int -> a -> unit) ->
-      (Bstr.t -> int -> a -> unit) -> a -> unit =
+  let set : type a.
+         string
+      -> int
+      -> (Bstr.t -> int -> a -> unit)
+      -> (Bstr.t -> int -> a -> unit)
+      -> a
+      -> unit =
    fun name width safe unsafe v ->
     let a = Bstr.create len and b = Bstr.create len in
     for i = 0 to len - width do
