@@ -54,7 +54,7 @@
 
 (library
  (name bin)
- (modules bin bin_type)
+ (modules bin bin_type bin_size)
  (public_name bin)
  (libraries bstr)
  (instrumentation
