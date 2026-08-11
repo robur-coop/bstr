@@ -97,6 +97,7 @@ and 'a variant = {
     vwit: 'a Witness.t
   ; vcases: 'a a_case array
   ; vget: 'a -> 'a case_v
+  ; vtag: int t
 }
 
 and ('a, 'b) map = { x: 'a t; f: 'a -> 'b; g: 'b -> 'a; mwit: 'b Witness.t }
@@ -139,3 +140,44 @@ let bstr_decode_varint bstr pos =
   done;
   !res
 [@@inline always]
+
+let rec a_fields : type a b. (a, b) fields -> a a_field list = function
+  | F0 -> []
+  | F1 (x, r) -> Field x :: a_fields r
+
+let record_fields : type a. a record -> a a_field list =
+ fun { rfields= Fields (fs, _); _ } -> a_fields fs
+
+module Dispatch = struct
+  type 'a t =
+    | Base : 'a -> 'a t
+    | Arrow : { arg_wit: 'b Witness.t; fn: 'b -> 'a } -> 'a t
+end
+
+module Case_folder = struct
+  type ('a, 'r) t = { c0: 'a case0 -> 'r; c1: 'b. ('a, 'b) case1 -> 'b -> 'r }
+end
+
+let fold_variant : type a r. (a, r) Case_folder.t -> a variant -> a -> r =
+ fun folder v_typ ->
+  let cases =
+    let fn = function
+      | C0 c0 -> Dispatch.Base (folder.c0 c0)
+      | C1 c1 -> Dispatch.Arrow { arg_wit= c1.cwitn1; fn= folder.c1 c1 }
+    in
+    Array.map fn v_typ.vcases
+  in
+  fun v ->
+    match v_typ.vget v with
+    | CV0 { ctag0; _ } ->
+        begin match cases.(ctag0) with
+        | Dispatch.Base x -> x
+        | _ -> assert false
+        end
+    | CV1 ({ ctag1; cwitn1; _ }, v) ->
+        begin match cases.(ctag1) with
+        | Dispatch.Arrow { fn; arg_wit } ->
+            let v = Witness.cast_exn cwitn1 arg_wit v in
+            fn v
+        | _ -> assert false
+        end

@@ -247,7 +247,7 @@ val ( |~ ) :
   ('a, 'b, 'c -> 'd) open_variant -> ('a, 'c) case -> ('a, 'b, 'd) open_variant
 (** [v |~ c] is the open variant [v] augmented with the case [c]. *)
 
-val sealv : ('a, 'b, 'a -> 'a case_p) open_variant -> 'a t
+val sealv : ?tag:int t -> ('a, 'b, 'a -> 'a case_p) open_variant -> 'a t
 (** [sealv v] seals the open variant [v]. *)
 
 (** {2:decoder Decoder.} *)
@@ -263,10 +263,7 @@ val encode_bstr : 'a t -> 'a -> Bstr.t -> pos -> unit
 val to_string : 'a t -> 'a -> string
 
 module Size : sig
-  type -'a size_of
-  (** The type for size function related to binary encoder/decoder. *)
-
-  val size_of : 'a t -> 'a size_of
+  type 'a encoding = 'a t
 
   type 'a t = private
     | Static of int
@@ -281,16 +278,9 @@ module Size : sig
             - [Unknown]: this codec may produce encodings that cannot be
               efficiently pre-computed. *)
 
-  val of_encoding : 'a size_of -> (Bstr.t -> int -> int) t
-  val of_value : 'a size_of -> ('a -> int) t
+  val size_of : 'a encoding -> ('a -> int) t
 end
 
 val size_of_value : 'a t -> 'a -> int option
 (** [size_of_value encoding value] attempts to calculate the number of bytes
     needed to encode the given [value] according to the given encoding. *)
-
-val size_of_bstr : ?off:int -> 'a t -> Bstr.t -> int option
-(** [size_of_encoding ?off encoding bstr] attempts to calculate the number of
-    bytes required to decode a value according to the given [encoding] and
-    according to what can be decoded in the given byte sequence [bstr] (at the
-    given offset [off], defaults to [0]). *)

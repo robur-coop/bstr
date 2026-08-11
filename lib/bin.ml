@@ -35,40 +35,6 @@ let string_decode_varint str pos =
 
 module Size = Bin_size
 
-module Dispatch = struct
-  type 'a t =
-    | Base : 'a -> 'a t
-    | Arrow : { arg_wit: 'b Witness.t; fn: 'b -> 'a } -> 'a t
-end
-
-module Case_folder = struct
-  type ('a, 'r) t = { c0: 'a case0 -> 'r; c1: 'b. ('a, 'b) case1 -> 'b -> 'r }
-end
-
-let fold_variant : type a r. (a, r) Case_folder.t -> a variant -> a -> r =
- fun folder v_typ ->
-  let cases =
-    let fn = function
-      | C0 c0 -> Dispatch.Base (folder.c0 c0)
-      | C1 c1 -> Dispatch.Arrow { arg_wit= c1.cwitn1; fn= folder.c1 c1 }
-    in
-    Array.map fn v_typ.vcases
-  in
-  fun v ->
-    match v_typ.vget v with
-    | CV0 { ctag0; _ } ->
-        begin match cases.(ctag0) with
-        | Dispatch.Base x -> x
-        | _ -> assert false
-        end
-    | CV1 ({ ctag1; cwitn1; _ }, v) ->
-        begin match cases.(ctag1) with
-        | Dispatch.Arrow { fn; arg_wit } ->
-            let v = Witness.cast_exn cwitn1 arg_wit v in
-            fn v
-        | _ -> assert false
-        end
-
 module Bytes = struct
   type 'a encoder = 'a -> bytes -> pos -> unit
 
@@ -670,17 +636,9 @@ let encode_bstr = Bstr.encode
 let decode = String.decode
 
 let size_of_value t value =
-  let sizer = Size.size_of t in
-  match Size.of_value sizer with
+  match Size.size_of t with
   | Size.Static len -> Some len
   | Size.Dynamic fn -> Some (fn value)
-  | Size.Unknown -> None
-
-let size_of_bstr ?(off = 0) t bstr =
-  let sizer = Size.size_of t in
-  match Size.of_encoding sizer with
-  | Size.Static len -> Some len
-  | Size.Dynamic fn -> Some (fn bstr off)
   | Size.Unknown -> None
 
 let to_string t value =
@@ -759,11 +717,11 @@ let app v c cs =
   let c, f = c (List.length cs) in
   (fc f, c :: cs)
 
-let sealv v =
+let sealv ?tag:(vtag = varint) v =
   let vget, vcases = v [] in
   let vwit = Witness.make () in
   let vcases = Array.of_list (List.rev vcases) in
-  Variant { vwit; vcases; vget }
+  Variant { vtag; vwit; vcases; vget }
 
 let ( |~ ) = app
 
