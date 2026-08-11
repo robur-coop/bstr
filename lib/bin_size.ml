@@ -31,7 +31,36 @@ let rec size_of : type a. a Bin_type.t -> a t = function
       List.fold_left fn (Static 0) (Bin_type.record_fields r)
   | Variant v -> variant v
   | Map { x; g; _ } -> using g (size_of x)
-  | Seq _ -> assert false
+  | Seq s -> seq s
+
+and seq : type a b. (a, b) Bin_type.seq -> b t =
+ fun { slen; selt; skind } ->
+  let count : b -> int =
+    match skind with Sarray -> Array.length | Slist -> List.length
+  and iter : (a -> unit) -> b -> unit =
+    match skind with Sarray -> Array.iter | Slist -> List.iter
+  in
+  let len : b t =
+    match (slen, size_of selt) with
+    | _, Unknown -> Unknown
+    | Fixed k, Static n -> Static (k * n)
+    | _, Static n -> Dynamic (fun v -> n * count v)
+    | _, Dynamic fn ->
+        let fn v =
+          let acc = ref 0 in
+          iter (fun x -> acc := !acc + fn x) v;
+          !acc
+        in
+        Dynamic fn
+  in
+  match slen with
+  | Fixed _ | Rest | Delim _ -> len
+  | Prefix t ->
+      begin match size_of t with
+      | Static n -> add_size (Static n) len
+      | Dynamic fn -> add_size (Dynamic (fun v -> fn (count v))) len
+      | Unknown -> Unknown
+      end
 
 and prim : type a. a Bin_type.primary -> a t = function
   | Char -> Static 1

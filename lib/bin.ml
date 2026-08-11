@@ -132,15 +132,9 @@ module Bytes = struct
     | Map m -> map m
     | Record r -> record r
     | Variant v -> variant v
-    | Seq { llen; lval } -> seq ~len:llen lval
+    | Seq s -> seq s
 
-  and seq : type a. len:int -> a t -> a array encoder =
-   fun ~len t arr buf off ->
-    if Array.length arr != len then
-      invalid_arg "Impossible to encode such sequence: lengths mismatch";
-    for i = 0 to len - 1 do
-      encode t (Array.unsafe_get arr i) buf off
-    done
+  and seq : type a b. (a, b) seq -> b encoder = fun _ -> assert false
 
   and prim : type a. a primary -> a encoder = function
     | Char -> encode_char
@@ -281,12 +275,7 @@ module String = struct
     | Record r -> record r
     | Variant v -> variant v
     | Map m -> map m
-    | Seq { llen; lval } -> seq ~len:llen lval
-
-  and seq : type a. len:int -> a t -> a array decoder =
-   fun ~len t bstr pos ->
-    let fn _idx = decode t bstr pos in
-    Array.init len fn
+    | Seq _ -> assert false
 
   and prim : type a. a primary -> a decoder = function
     | Char -> decode_char
@@ -435,12 +424,7 @@ module Bstr = struct
     | Record r -> record r
     | Variant v -> variant v
     | Map m -> map m
-    | Seq { llen; lval } -> seq ~len:llen lval
-
-  and seq : type a. len:int -> a t -> a array decoder =
-   fun ~len t bstr pos ->
-    let fn _idx = decode t bstr pos in
-    Array.init len fn
+    | Seq _ -> assert false
 
   and prim : type a. a primary -> a decoder = function
     | Char -> decode_char
@@ -584,15 +568,7 @@ module Bstr = struct
     | Map m -> map m
     | Record r -> record r
     | Variant v -> variant v
-    | Seq { llen; lval } -> seq ~len:llen lval
-
-  and seq : type a. len:int -> a t -> a array encoder =
-   fun ~len t arr buf off ->
-    if Array.length arr != len then
-      invalid_arg "Impossible to encode such sequence: lengths mismatch";
-    for i = 0 to len - 1 do
-      encode t (Array.unsafe_get arr i) buf off
-    done
+    | Seq _ -> assert false
 
   and prim : type a. a primary -> a encoder = function
     | Char -> encode_char
@@ -728,7 +704,4 @@ let ( |~ ) = app
 (* map *)
 
 let map x f g = Map { x; f; g; mwit= Witness.make () }
-
-let seq ~len:llen lval =
-  if llen <= 0 then invalid_arg "Bin.seq";
-  Seq { llen; lval }
+let seq ~len:_ _lval = assert false

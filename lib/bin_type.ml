@@ -49,7 +49,7 @@ type _ t =
   | Record : 'a record -> 'a t
   | Variant : 'a variant -> 'a t
   | Map : ('a, 'b) map -> 'b t
-  | Seq : 'a len_v -> 'a array t
+  | Seq : ('a, 'b) seq -> 'b t
 
 and _ primary =
   | Char : char primary
@@ -66,7 +66,13 @@ and _ primary =
   | Bstr : int -> Bstr.t primary
   | Const : 'a -> 'a primary
 
-and 'a len_v = { llen: int; lval: 'a t }
+and len = Fixed of int | Prefix of int t | Delim of char | Rest
+and ('a, 'b) seq = { slen: len; selt: 'a t; skind: ('a, 'b) seq_kind }
+
+and (_, _) seq_kind =
+  | Sarray : ('a, 'a array) seq_kind
+  | Slist : ('a, 'a list) seq_kind
+
 and _ a_case = C0 : 'a case0 -> 'a a_case | C1 : ('a, 'b) case1 -> 'a a_case
 
 and _ case_v =
