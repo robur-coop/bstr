@@ -68,6 +68,7 @@
     go directly to OCaml values, which is generally more pleasant to manipulate
     with OCaml than to make C stubs. *)
 
+type pos = int ref
 type 'a t
 
 (** {1:primitives Primitives.} *)
@@ -251,14 +252,14 @@ val sealv : ('a, 'b, 'a -> 'a case_p) open_variant -> 'a t
 
 (** {2:decoder Decoder.} *)
 
-val decode_bstr : 'a t -> Bstr.t -> int ref -> 'a
+val decode_bstr : 'a t -> Bstr.t -> pos -> 'a
 (** [decode_bstr repr] is the binary decoder for values of type [repr]. *)
 
-val decode : 'a t -> string -> int ref -> 'a
+val decode : 'a t -> string -> pos -> 'a
 
 (** {2:encoder Encoder.} *)
 
-val encode_bstr : 'a t -> 'a -> Bstr.t -> int ref -> unit
+val encode_bstr : 'a t -> 'a -> Bstr.t -> pos -> unit
 val to_string : 'a t -> 'a -> string
 
 module Size : sig

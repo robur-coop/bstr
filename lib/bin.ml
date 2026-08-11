@@ -354,7 +354,7 @@ let fold_variant : type a r. (a, r) Case_folder.t -> a variant -> a -> r =
         end
 
 module Bytes = struct
-  type 'a encoder = 'a -> bytes -> int ref -> unit
+  type 'a encoder = 'a -> bytes -> pos -> unit
 
   let encode_char chr buf off =
     let pos = !off in
@@ -477,7 +477,7 @@ module Bytes = struct
 
   and record : type a. a record -> a encoder =
    fun r ->
-    let fields_encoders : (a -> bytes -> int ref -> unit) list =
+    let fields_encoders : (a -> bytes -> pos -> unit) list =
       let fn (Field f) = fun v buf off -> (encode f.ftype) (f.fget v) buf off in
       List.map fn (fields r)
     in
@@ -501,10 +501,10 @@ end
 
 module String = struct
   module Record_decoder = Fields_folder (struct
-    type ('a, 'b) t = string -> int ref -> 'b -> 'a
+    type ('a, 'b) t = string -> pos -> 'b -> 'a
   end)
 
-  type 'a decoder = string -> int ref -> 'a
+  type 'a decoder = string -> pos -> 'a
 
   let decode_char str pos =
     let idx = !pos in
@@ -657,10 +657,10 @@ end
 
 module Bstr = struct
   module Record_decoder = Fields_folder (struct
-    type ('a, 'b) t = Bstr.t -> int ref -> 'b -> 'a
+    type ('a, 'b) t = Bstr.t -> pos -> 'b -> 'a
   end)
 
-  type 'a decoder = Bstr.t -> int ref -> 'a
+  type 'a decoder = Bstr.t -> pos -> 'a
 
   let decode_char bstr pos =
     let idx = !pos in
@@ -806,7 +806,7 @@ module Bstr = struct
       let i = bstr_decode_varint bstr pos in
       decoders.(i) bstr pos
 
-  type 'a encoder = 'a -> Bstr.t -> int ref -> unit
+  type 'a encoder = 'a -> Bstr.t -> pos -> unit
 
   let encode_char chr bstr off =
     let pos = !off in
@@ -929,7 +929,7 @@ module Bstr = struct
 
   and record : type a. a record -> a encoder =
    fun r ->
-    let fields_encoders : (a -> Bstr.t -> int ref -> unit) list =
+    let fields_encoders : (a -> Bstr.t -> pos -> unit) list =
       let fn (Field f) = fun v buf off -> (encode f.ftype) (f.fget v) buf off in
       List.map fn (fields r)
     in

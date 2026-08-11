@@ -41,6 +41,7 @@ module Witness = struct
     match eq awit bwit with Some Refl -> a | None -> assert false
 end
 
+type pos = int ref
 type endianness = Big_endian | Little_endian | Native_endian
 
 type _ t =
