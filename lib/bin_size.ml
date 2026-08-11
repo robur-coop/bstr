@@ -1,4 +1,3 @@
-type 'a encoding = 'a Bin_type.t
 type 'a t = Static of int | Dynamic of 'a | Unknown
 
 let map : type a b. (a -> b) -> a t -> b t =
@@ -116,14 +115,14 @@ let sizer_until byte =
   in
   Sizer.dynamic ~of_value ~of_encoding
 
-let rec size_of : type a. a encoding -> a Sizer.t = function
+let rec size_of : type a. a Bin_type.t -> a Sizer.t = function
   | Primary p -> prim p
   | Record r -> record r
   | Variant v -> variant v
   | Map m -> map m
   | Seq { llen; lval } -> seq ~llen lval
 
-and seq : type a. llen:int -> a encoding -> a array Sizer.t =
+and seq : type a. llen:int -> a Bin_type.t -> a array Sizer.t =
  fun ~llen lval ->
   match size_of lval with
   | { Sizer.of_value= Static len; _ } -> Sizer.static (llen * len)
