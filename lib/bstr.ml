@@ -82,16 +82,22 @@ external set_int16_ne : t -> int -> int -> unit = "%caml_bigstring_set16"
 external get_int32_ne : t -> int -> int32 = "%caml_bigstring_get32"
 external set_int32_ne : t -> int -> int32 -> unit = "%caml_bigstring_set32"
 external set_int64_ne : t -> int -> int64 -> unit = "%caml_bigstring_set64"
+external unsafe_set_uint8 : t -> int -> int -> unit = "%caml_ba_unsafe_set_1"
 external unsafe_get_uint16_ne : t -> int -> int = "%caml_bigstring_get16u"
 
 external unsafe_set_uint16_ne : t -> int -> int -> unit
   = "%caml_bigstring_set16u"
 
+external unsafe_get_int32_ne : t -> int -> int32 = "%caml_bigstring_get32u"
+
+external unsafe_set_int32_ne : t -> int -> int32 -> unit
+  = "%caml_bigstring_set32u"
+
 external unsafe_get_int64_ne : t -> (int[@untagged]) -> (int64[@unboxed])
   = "bstr_bytecode_get64u" "bstr_native_get64u"
 [@@noalloc]
 
-external _unsafe_set_int64_ne : t -> int -> int64 -> unit
+external unsafe_set_int64_ne : t -> int -> int64 -> unit
   = "%caml_bigstring_set64u"
 
 external unsafe_memcmp :
@@ -247,16 +253,6 @@ let get_uint16_be bstr i =
   if not Sys.big_endian then swap16 (get_uint16_ne bstr i)
   else get_uint16_ne bstr i
 
-let[@coverage off] _unsafe_get_uint16_le bstr i =
-  (* TODO(dinosaure): for unicode. *)
-  if Sys.big_endian then swap16 (unsafe_get_uint16_ne bstr i)
-  else unsafe_get_uint16_ne bstr i
-
-let[@coverage off] _unsafe_get_uint16_be bstr i =
-  (* TODO(dinosaure): for unicode. *)
-  if not Sys.big_endian then swap16 (unsafe_get_uint16_ne bstr i)
-  else unsafe_get_uint16_ne bstr i
-
 let get_int16_ne bstr i =
   (get_uint16_ne bstr i lsl (Sys.int_size - 16)) asr (Sys.int_size - 16)
 
@@ -279,16 +275,6 @@ let get_int64_le bstr i =
 let get_int64_be bstr i =
   if not Sys.big_endian then swap64 (get_int64_ne bstr i)
   else get_int64_ne bstr i
-
-let[@coverage off] _unsafe_set_uint16_le bstr i x =
-  (* TODO(dinosaure): for unicode. *)
-  if Sys.big_endian then unsafe_set_uint16_ne bstr i (swap16 x)
-  else unsafe_set_uint16_ne bstr i x
-
-let[@coverage off] _unsafe_set_uint16_be bstr i x =
-  (* TODO(dinosaure): for unicode. *)
-  if Sys.big_endian then unsafe_set_uint16_ne bstr i x
-  else unsafe_set_uint16_ne bstr i (swap16 x)
 
 let set_int16_le bstr i x =
   if Sys.big_endian then set_int16_ne bstr i (swap16 x)
@@ -318,6 +304,87 @@ let set_int8 = set_uint8
 let set_uint16_ne = set_int16_ne
 let set_uint16_be = set_int16_be
 let set_uint16_le = set_int16_le
+
+let unsafe_get_int8 bstr i =
+  (unsafe_get_uint8 bstr i lsl (Sys.int_size - 8)) asr (Sys.int_size - 8)
+[@@inline]
+
+let unsafe_get_uint16_le bstr i =
+  if Sys.big_endian then swap16 (unsafe_get_uint16_ne bstr i)
+  else unsafe_get_uint16_ne bstr i
+[@@inline]
+
+let unsafe_get_uint16_be bstr i =
+  if not Sys.big_endian then swap16 (unsafe_get_uint16_ne bstr i)
+  else unsafe_get_uint16_ne bstr i
+[@@inline]
+
+let unsafe_get_int16_ne bstr i =
+  (unsafe_get_uint16_ne bstr i lsl (Sys.int_size - 16)) asr (Sys.int_size - 16)
+[@@inline]
+
+let unsafe_get_int16_le bstr i =
+  (unsafe_get_uint16_le bstr i lsl (Sys.int_size - 16)) asr (Sys.int_size - 16)
+[@@inline]
+
+let unsafe_get_int16_be bstr i =
+  (unsafe_get_uint16_be bstr i lsl (Sys.int_size - 16)) asr (Sys.int_size - 16)
+[@@inline]
+
+let unsafe_get_int32_le bstr i =
+  if Sys.big_endian then swap32 (unsafe_get_int32_ne bstr i)
+  else unsafe_get_int32_ne bstr i
+[@@inline]
+
+let unsafe_get_int32_be bstr i =
+  if not Sys.big_endian then swap32 (unsafe_get_int32_ne bstr i)
+  else unsafe_get_int32_ne bstr i
+[@@inline]
+
+let unsafe_get_int64_le bstr i =
+  if Sys.big_endian then swap64 (unsafe_get_int64_ne bstr i)
+  else unsafe_get_int64_ne bstr i
+[@@inline]
+
+let unsafe_get_int64_be bstr i =
+  if not Sys.big_endian then swap64 (unsafe_get_int64_ne bstr i)
+  else unsafe_get_int64_ne bstr i
+[@@inline]
+
+let unsafe_set_int16_le bstr i x =
+  if Sys.big_endian then unsafe_set_uint16_ne bstr i (swap16 x)
+  else unsafe_set_uint16_ne bstr i x
+[@@inline]
+
+let unsafe_set_int16_be bstr i x =
+  if not Sys.big_endian then unsafe_set_uint16_ne bstr i (swap16 x)
+  else unsafe_set_uint16_ne bstr i x
+[@@inline]
+
+let unsafe_set_int32_le bstr i x =
+  if Sys.big_endian then unsafe_set_int32_ne bstr i (swap32 x)
+  else unsafe_set_int32_ne bstr i x
+[@@inline]
+
+let unsafe_set_int32_be bstr i x =
+  if not Sys.big_endian then unsafe_set_int32_ne bstr i (swap32 x)
+  else unsafe_set_int32_ne bstr i x
+[@@inline]
+
+let unsafe_set_int64_le bstr i x =
+  if Sys.big_endian then unsafe_set_int64_ne bstr i (swap64 x)
+  else unsafe_set_int64_ne bstr i x
+[@@inline]
+
+let unsafe_set_int64_be bstr i x =
+  if not Sys.big_endian then unsafe_set_int64_ne bstr i (swap64 x)
+  else unsafe_set_int64_ne bstr i x
+[@@inline]
+
+let unsafe_set_int8 = unsafe_set_uint8
+let unsafe_set_int16_ne = unsafe_set_uint16_ne
+let unsafe_set_uint16_le = unsafe_set_int16_le
+let unsafe_set_uint16_be = unsafe_set_int16_be
 
 external unsafe_sub : t -> (int[@untagged]) -> (int[@untagged]) -> t
   = "bstr_bytecode_unsafe_sub" "bstr_native_unsafe_sub"

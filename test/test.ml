@@ -1,4 +1,5 @@
 let strf fmt = Format.asprintf fmt
+let failwithf fmt = Format.kasprintf failwith fmt
 let ( / ) = Filename.concat
 
 let check test =
@@ -53,7 +54,7 @@ let runner ?(g = Random.State.make_self_init ())
   in
   go 0
 
-let run { directory= dir } { title; fn; _ } =
+let run { directory= dir } { title; descr; fn } =
   let old_stderr = Unix.dup Unix.stderr in
   let new_stderr = open_out_bin (dir / strf "%s.stderr" title) in
   Unix.dup2 (Unix.descr_of_out_channel new_stderr) Unix.stderr;
@@ -63,7 +64,7 @@ let run { directory= dir } { title; fn; _ } =
     Unix.close old_stderr;
     close_out new_stderr
   in
-  Format.eprintf "*** %s ***\n%!" title;
+  Format.eprintf "*** %s ***\n%s\n%!" title descr;
   try Fun.protect ~finally fn
   with exn ->
     let ic = open_in_bin (dir / strf "%s.stderr" title) in
