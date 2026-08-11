@@ -1,57 +1,157 @@
 include Bin_type
 
+type abs = Off.abs Off.t
+type rel = Off.rel Off.t
+
+(* XXX(dinosaure): It's rather ugly, but it's necessary for performance. We need
+   to be able to generate a function that allows writing, and this function must
+   not contain any pattern matching (particularly regarding endianness). We need
+   to move the pattern matching out of the write operation (and find it, in
+   particular, in the [static_primary_writer_for] function). *)
+
+let unsafe_set delta get v buf off =
+  S.unsafe_set buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_uint8 delta get v buf off =
+  S.unsafe_set_uint8 buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_int8 delta get v buf off =
+  S.unsafe_set_int8 buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_uint16_le delta get v buf off =
+  S.unsafe_set_uint16_le buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_uint16_be delta get v buf off =
+  S.unsafe_set_uint16_be buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_uint16_ne delta get v buf off =
+  S.unsafe_set_uint16_ne buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_int16_le delta get v buf off =
+  S.unsafe_set_int16_le buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_int16_be delta get v buf off =
+  S.unsafe_set_int16_be buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_int16_ne delta get v buf off =
+  S.unsafe_set_int16_ne buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_int32_le delta get v buf off =
+  S.unsafe_set_int32_le buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_int32_be delta get =
+  ();
+  fun v buf off -> S.unsafe_set_int32_be buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_int32_ne delta get v buf off =
+  S.unsafe_set_int32_ne buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_int64_le delta get v buf off =
+  S.unsafe_set_int64_le buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_int64_be delta get =
+ fun v buf off -> S.unsafe_set_int64_be buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+let unsafe_set_int64_ne delta get =
+  ();
+  fun v buf off -> S.unsafe_set_int64_ne buf (Off.at off delta :> int) (get v)
+[@@inline always]
+
+(* Thanks, god! *)
+
+type 'a fwrite = 'a -> S.t -> int -> int -> pos -> unit
+type 'a swrite = 'a -> S.t -> abs -> unit
+
+let rec static_writer_for : type a b. rel -> (a -> b) -> b t -> a swrite option
+    =
+ fun delta get t ->
+  match t with
+  | Primary p -> static_primary_writer_for delta get p
+  | Map { x; g; _ } -> static_writer_for delta (fun v -> g (get v)) x
+  | Record r ->
+      begin match static_record_writer_at delta r with
+      | Some wr -> Some (fun v buf off -> wr (get v) buf off)
+      | None -> None
+      end
+  | _ -> None
+
+and static_primary_writer_for : type a b.
+    rel -> (a -> b) -> b primary -> a swrite option =
+ fun delta get t ->
+  match t with
+  | Const _ -> Some (fun _ _ _ -> ())
+  | Char -> Some (unsafe_set delta get)
+  | UInt8 -> Some (unsafe_set_uint8 delta get)
+  | Int8 -> Some (unsafe_set_int8 delta get)
+  | UInt16 Big_endian -> Some (unsafe_set_uint16_be delta get)
+  | UInt16 Little_endian -> Some (unsafe_set_uint16_le delta get)
+  | UInt16 Native_endian -> Some (unsafe_set_uint16_ne delta get)
+  | Int16 Big_endian -> Some (unsafe_set_int16_be delta get)
+  | Int16 Little_endian -> Some (unsafe_set_int16_le delta get)
+  | Int16 Native_endian -> Some (unsafe_set_int16_ne delta get)
+  | Int32 Big_endian -> Some (unsafe_set_int32_be delta get)
+  | Int32 Little_endian -> Some (unsafe_set_int32_le delta get)
+  | Int32 Native_endian -> Some (unsafe_set_int32_ne delta get)
+  | Int64 Big_endian -> Some (unsafe_set_int64_be delta get)
+  | Int64 Little_endian -> Some (unsafe_set_int64_le delta get)
+  | Int64 Native_endian -> Some (unsafe_set_int64_ne delta get)
+  | _ -> None
+
+(* NOTE(dinosaure): here, we compile an array which contains encoders for each
+   field of the record. Compilation is only possible if the size of the record's
+   serialisation is known statically. *)
+
+and static_record_cells : type a. rel -> a record -> a swrite array option =
+ fun delta r ->
+  let exception Not_static in
+  let delta = ref delta in
+  try
+    let fn (Bin_type.Field field) =
+      let w =
+        match static_writer_for !delta field.fget field.ftype with
+        | Some w -> w
+        | None -> raise_notrace Not_static
+      in
+      begin match (Bin_size.make field.ftype).Bin_size.layout with
+      | Some n -> delta := Off.(!delta +> n)
+      | None -> raise_notrace Not_static
+      end;
+      w
+    in
+    let cells = List.map fn (record_fields r) in
+    Some (Array.of_list cells)
+  with Not_static -> None
+
+and static_record_writer_at : type a. rel -> a record -> a swrite option =
+ fun delta r ->
+  match static_record_cells delta r with
+  | None -> None
+  | Some cells ->
+      let len = Array.length cells in
+      let fn v buf off =
+        for i = 0 to len - 1 do
+          (Array.unsafe_get cells i) v buf off
+        done
+      in
+      Some fn
+
+(*
 type 'a encoder = 'a -> S.t -> pos -> unit
 
-let encode_char chr buf off =
-  let pos = !off in
-  incr off; S.set buf pos chr
-[@@inline always]
-
-let encode_uint8 byte buf off =
-  let pos = !off in
-  incr off;
-  S.set_uint8 buf pos byte
-[@@inline always]
-
-let encode_int8 byte buf off =
-  let pos = !off in
-  incr off;
-  S.set_int8 buf pos byte
-[@@inline always]
-
-let encode_uint16 endian value buf off =
-  let pos = !off in
-  off := !off + 2;
-  match endian with
-  | Big_endian -> S.set_uint16_be buf pos value
-  | Little_endian -> S.set_uint16_le buf pos value
-  | Native_endian -> S.set_uint16_ne buf pos value
-[@@inline always]
-
-let encode_int16 endian value buf off =
-  let pos = !off in
-  off := !off + 2;
-  match endian with
-  | Big_endian -> S.set_int16_be buf pos value
-  | Little_endian -> S.set_int16_le buf pos value
-  | Native_endian -> S.set_int16_ne buf pos value
-[@@inline always]
-
-let encode_int32 endian value buf off =
-  let pos = !off in
-  off := !off + 4;
-  match endian with
-  | Big_endian -> S.set_int32_be buf pos value
-  | Little_endian -> S.set_int32_le buf pos value
-  | Native_endian -> S.set_int32_ne buf pos value
-
-let encode_int64 endian value buf off =
-  let pos = !off in
-  off := !off + 8;
-  match endian with
-  | Big_endian -> S.set_int64_be buf pos value
-  | Little_endian -> S.set_int64_le buf pos value
-  | Native_endian -> S.set_int64_ne buf pos value
 
 let encode_bytes len src buf off =
   let pos = !off in
@@ -136,3 +236,4 @@ and variant : type a. a variant -> a encoder =
 and map : type a b. (a, b) map -> b encoder =
  fun { x; g; _ } -> fun u buf off -> encode x (g u) buf off
 
+*)

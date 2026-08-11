@@ -41,6 +41,78 @@ module Witness = struct
     match eq awit bwit with Some Refl -> a | None -> assert false
 end
 
+(* NOTE(dinosaure): [Len] and [Off] enable us to avoid making a mess of things
+   at little cost (as they do not add any penalty to the encoding and decoding
+   process). Let's put our trust (and faith) in OCaml, the grand master. *)
+
+module Len : sig
+  type t = private int [@@immediate]
+
+  val zero : t
+  val one : t
+  val v : int -> t
+  val to_int : t -> int
+  val ( + ) : t -> t -> t
+  val ( * ) : int -> t -> t
+  val ( = ) : t -> t -> bool
+  val ( < ) : t -> t -> bool
+  val ( <= ) : t -> t -> bool
+end = struct
+  type t = int
+
+  let zero = 0
+  let one = 1
+  let[@inline] to_int (n : int) = n
+  let[@inline] ( + ) (a : int) (b : int) = a + b
+  let[@inline] ( * ) (a : int) (b : int) = a * b
+  let[@inline] ( = ) (a : int) (b : int) = a = b
+  let[@inline] ( < ) (a : int) (b : int) = a < b
+  let[@inline] ( <= ) (a : int) (b : int) = a <= b
+
+  let[@inline] v n =
+    if n < 0 then invalid_arg "Bin_type.Len.v";
+    n
+end
+
+module Off : sig
+  type _ t = private int [@@immediate]
+  type abs
+  type rel
+
+  val zero : 'w t
+  val v : int -> 'w t
+  val to_int : 'w t -> int
+  val ( +> ) : 'w t -> Len.t -> 'w t
+  val ( -- ) : 'w t -> 'w t -> Len.t
+  val ( = ) : 'w t -> 'w t -> bool
+  val ( < ) : 'w t -> 'w t -> bool
+  val ( <= ) : 'w t -> 'w t -> bool
+  val ( > ) : 'w t -> 'w t -> bool
+  val at : abs t -> rel t -> abs t
+  val from_base : rel t -> Len.t
+  val of_len : Len.t -> 'w t
+end = struct
+  type _ t = int
+  type abs
+  type rel
+
+  let zero = 0
+  let[@inline] to_int (o : int) = o
+  let[@inline] ( +> ) (a : int) (b : Len.t) = a + (b :> int)
+  let[@inline] ( -- ) (a : int) (b : int) = Len.v (if a > b then a - b else 0)
+  let[@inline] ( = ) (a : int) (b : int) = a = b
+  let[@inline] ( < ) (a : int) (b : int) = a < b
+  let[@inline] ( <= ) (a : int) (b : int) = a <= b
+  let[@inline] ( > ) (a : int) (b : int) = a > b
+  let[@inline] at (base : int) (delta : int) = base + delta
+  let[@inline] from_base (delta : int) = Len.v delta
+  let[@inline] of_len (n : Len.t) = (n :> int)
+
+  let[@inline] v n =
+    if n < 0 then invalid_arg "Bin_type.Off.v";
+    n
+end
+
 type pos = int ref
 type endianness = Big_endian | Little_endian | Native_endian
 

@@ -259,9 +259,6 @@ val decode : 'a t -> string -> pos -> 'a
 
 (** {2:encoder Encoder.} *)
 
-val encode_bstr : 'a t -> 'a -> Bstr.t -> pos -> unit
-val to_string : 'a t -> 'a -> string
-
 module Size : sig
   type 'a encoding = 'a t
 

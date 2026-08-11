@@ -17,7 +17,13 @@
 [@@@warning "-unused-field"]
 
 include Bin_type
-module Size = Bin_size
+
+module Size = struct
+  type 'a encoding = 'a t
+
+  include Bin_size
+end
+
 module Bytes = Bin_encoder_bytes
 module String = Bin_decoder_string
 
@@ -27,22 +33,13 @@ module Bstr = struct
 end
 
 let decode_bstr = Bstr.decode
-let encode_bstr = Bstr.encode
 let decode = String.decode
 
 let size_of_value t value =
-  match Size.size_of t with
+  match (Size.make t).Size.of_value with
   | Size.Static len -> Some len
   | Size.Dynamic fn -> Some (fn value)
   | Size.Unknown -> None
-
-let to_string t value =
-  match size_of_value t value with
-  | Some len ->
-      let buf = Stdlib.Bytes.create len in
-      Bytes.encode t value buf (ref 0);
-      Stdlib.Bytes.unsafe_to_string buf
-  | None -> assert false (* TODO(dinosaure): with [Buffer.t]. *)
 
 let const v = Primary (Const v)
 let char = Primary Char
