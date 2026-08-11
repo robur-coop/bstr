@@ -132,21 +132,6 @@ struct
 end
 
 (* TODO(dinosaure): it's not the right place... *)
-let bstr_decode_varint bstr pos =
-  let bits = ref 0 in
-  let res = ref 0 in
-  while
-    let cmd = Bstr.get_uint8 bstr !pos in
-    incr pos;
-    res := !res lor ((cmd land 0x7f) lsl !bits);
-    bits := !bits + 7;
-    cmd land 0x80 != 0
-  do
-    ()
-  done;
-  !res
-[@@inline always]
-
 let rec a_fields : type a b. (a, b) fields -> a a_field list = function
   | F0 -> []
   | F1 (x, r) -> Field x :: a_fields r

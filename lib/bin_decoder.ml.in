@@ -1,0 +1,161 @@
+open Bin_type
+
+module Record_decoder = Fields_folder (struct
+  type ('a, 'b) t = S.t -> pos -> 'b -> 'a
+end)
+
+type 'a decoder = S.t -> pos -> 'a
+
+let decode_varint bstr pos =
+  let bits = ref 0 in
+  let res = ref 0 in
+  while
+    let cmd = S.get_uint8 bstr !pos in
+    incr pos;
+    res := !res lor ((cmd land 0x7f) lsl !bits);
+    bits := !bits + 7;
+    cmd land 0x80 != 0
+  do
+    ()
+  done;
+  !res
+[@@inline always]
+
+let decode_char bstr pos =
+  let idx = !pos in
+  incr pos; S.get bstr idx
+[@@inline always]
+
+let decode_uint8 bstr pos =
+  let idx = !pos in
+  incr pos; S.get_uint8 bstr idx
+[@@inline always]
+
+let decode_int8 bstr pos =
+  let idx = !pos in
+  incr pos; S.get_int8 bstr idx
+[@@inline always]
+
+let decode_uint16 e bstr pos =
+  let idx = !pos in
+  pos := !pos + 2;
+  match e with
+  | Big_endian -> S.get_uint16_be bstr idx
+  | Little_endian -> S.get_uint16_le bstr idx
+  | Native_endian -> S.get_uint16_ne bstr idx
+[@@inline always]
+
+let decode_int16 endian bstr pos =
+  let idx = !pos in
+  pos := !pos + 2;
+  match endian with
+  | Big_endian -> S.get_int16_be bstr idx
+  | Little_endian -> S.get_int16_le bstr idx
+  | Native_endian -> S.get_int16_ne bstr idx
+[@@inline always]
+
+let decode_int32 endian bstr pos =
+  let idx = !pos in
+  pos := !pos + 4;
+  match endian with
+  | Big_endian -> S.get_int32_be bstr idx
+  | Little_endian -> S.get_int32_le bstr idx
+  | Native_endian -> S.get_int32_ne bstr idx
+[@@inline always]
+
+let decode_int64 endian bstr pos =
+  let idx = !pos in
+  pos := !pos + 8;
+  match endian with
+  | Big_endian -> S.get_int64_be bstr idx
+  | Little_endian -> S.get_int64_le bstr idx
+  | Native_endian -> S.get_int64_ne bstr idx
+[@@inline always]
+
+let decode_bytes len bstr pos =
+  let off = !pos in
+  pos := !pos + len;
+  S.sub_string bstr ~off ~len
+[@@inline always]
+
+let decode_bstr len bstr pos =
+  if len == 0 then S.empty
+  else begin
+    let off = !pos in
+    pos := !pos + len;
+    S.sub bstr ~off ~len
+  end
+[@@inline always]
+
+let decode_cstring bstr pos =
+  let off = !pos in
+  while S.get_uint8 bstr !pos != 0 do
+    incr pos
+  done;
+  let len = !pos - off in
+  let str = S.sub_string bstr ~off ~len in
+  incr pos; str
+[@@inline always]
+
+let decode_until byte bstr pos =
+  let predicate byte' = byte != byte' in
+  let off = !pos in
+  while predicate (S.get bstr !pos) == false do
+    incr pos
+  done;
+  let len = !pos - off in
+  S.sub_string bstr ~off ~len
+[@@inline always]
+
+let rec decode : type a. a t -> a decoder = function
+  | Primary p -> prim p
+  | Record r -> record r
+  | Variant v -> variant v
+  | Map m -> map m
+  | Seq _ -> assert false
+
+and prim : type a. a primary -> a decoder = function
+  | Char -> decode_char
+  | UInt8 -> decode_uint8
+  | Int8 -> decode_int8
+  | UInt16 e -> decode_uint16 e
+  | Int16 e -> decode_int16 e
+  | Int32 e -> decode_int32 e
+  | Int64 e -> decode_int64 e
+  | Bytes len -> decode_bytes len
+  | Var_int -> decode_varint
+  | CString -> decode_cstring
+  | Until p -> decode_until p
+  | Bstr _ -> assert false
+  | Const v -> fun _bstr _off -> v
+
+and map : type a b. (a, b) map -> b decoder =
+ fun { x; f; _ } -> fun buf pos -> f (decode x buf pos)
+
+and record : type a. a record -> a decoder =
+ fun { rfields= Fields (fs, constr); _ } ->
+  let nil _bstr _pos fn = fn in
+  let cons { ftype; _ } k =
+    let decode = decode ftype in
+    fun bstr pos constr ->
+      let x = decode bstr pos in
+      let constr = constr x in
+      k bstr pos constr
+  in
+  let fn = Record_decoder.fold { nil; cons } fs in
+  fun bstr pos -> fn bstr pos constr
+
+and variant : type a. a variant -> a decoder =
+ fun v ->
+  let decoders : a decoder array =
+    let fn = function
+      | C0 c -> fun _ _ -> c.c0
+      | C1 c ->
+          let decode_arg = decode c.ctype1 in
+          fun bstr pos -> c.c1 (decode_arg bstr pos)
+    in
+    Array.map fn v.vcases
+  in
+  fun bstr pos ->
+    let i = decode_varint bstr pos in
+    decoders.(i) bstr pos

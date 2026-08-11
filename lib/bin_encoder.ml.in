@@ -1,0 +1,138 @@
+include Bin_type
+
+type 'a encoder = 'a -> S.t -> pos -> unit
+
+let encode_char chr buf off =
+  let pos = !off in
+  incr off; S.set buf pos chr
+[@@inline always]
+
+let encode_uint8 byte buf off =
+  let pos = !off in
+  incr off;
+  S.set_uint8 buf pos byte
+[@@inline always]
+
+let encode_int8 byte buf off =
+  let pos = !off in
+  incr off;
+  S.set_int8 buf pos byte
+[@@inline always]
+
+let encode_uint16 endian value buf off =
+  let pos = !off in
+  off := !off + 2;
+  match endian with
+  | Big_endian -> S.set_uint16_be buf pos value
+  | Little_endian -> S.set_uint16_le buf pos value
+  | Native_endian -> S.set_uint16_ne buf pos value
+[@@inline always]
+
+let encode_int16 endian value buf off =
+  let pos = !off in
+  off := !off + 2;
+  match endian with
+  | Big_endian -> S.set_int16_be buf pos value
+  | Little_endian -> S.set_int16_le buf pos value
+  | Native_endian -> S.set_int16_ne buf pos value
+[@@inline always]
+
+let encode_int32 endian value buf off =
+  let pos = !off in
+  off := !off + 4;
+  match endian with
+  | Big_endian -> S.set_int32_be buf pos value
+  | Little_endian -> S.set_int32_le buf pos value
+  | Native_endian -> S.set_int32_ne buf pos value
+
+let encode_int64 endian value buf off =
+  let pos = !off in
+  off := !off + 8;
+  match endian with
+  | Big_endian -> S.set_int64_be buf pos value
+  | Little_endian -> S.set_int64_le buf pos value
+  | Native_endian -> S.set_int64_ne buf pos value
+
+let encode_bytes len src buf off =
+  let pos = !off in
+  off := !off + len;
+  S.blit_string src 0 buf pos len
+
+let encode_bstr len src buf off =
+  let dst_off = !off in
+  off := !off + len;
+  Bstr.blit_to_bytes src ~src_off:0 buf ~dst_off ~len
+
+let encode_varint value buf off =
+  let num = ref (value lsr 7) in
+  let cmd = ref (value land 0x7f) in
+  cmd := if !num != 0 then !cmd lor 0x80 else !cmd;
+  S.set_uint8 buf !off !cmd;
+  incr off;
+  while !num != 0 do
+    cmd := !num land 0x7f;
+    num := !num lsr 7;
+    cmd := if !num != 0 then !cmd lor 0x80 else !cmd;
+    S.set_uint8 buf !off !cmd;
+    incr off
+  done
+
+let encode_cstring src buf off =
+  let pos = !off in
+  let len = String.length src in
+  off := !off + len;
+  S.blit_string src 0 buf pos len;
+  S.set_uint8 buf !off 0;
+  incr off
+
+let encode_until src buf off =
+  let pos = !off in
+  let len = String.length src in
+  off := !off + len;
+  S.blit_string src 0 buf pos len
+
+let rec encode : type a. a t -> a encoder = function
+  | Primary p -> prim p
+  | Map m -> map m
+  | Record r -> record r
+  | Variant v -> variant v
+  | Seq s -> seq s
+
+and seq : type a b. (a, b) seq -> b encoder = fun _ -> assert false
+
+and prim : type a. a primary -> a encoder = function
+  | Char -> encode_char
+  | UInt8 -> encode_uint8
+  | Int8 -> encode_int8
+  | UInt16 e -> encode_uint16 e
+  | Int16 e -> encode_int16 e
+  | Int32 e -> encode_int32 e
+  | Int64 e -> encode_int64 e
+  | Bytes len -> encode_bytes len
+  | Var_int -> encode_varint
+  | CString -> encode_cstring
+  | Until _ -> encode_until
+  | Bstr _ -> assert false
+  | Const _ -> fun _v _bstr _off -> ()
+
+and record : type a. a record -> a encoder =
+ fun r ->
+  let fields_encoders : (a -> S.t -> pos -> unit) list =
+    let fn (Field f) = fun v buf off -> (encode f.ftype) (f.fget v) buf off in
+    List.map fn (fields r)
+  in
+  fun v buf off -> List.iter (fun fn -> fn v buf off) fields_encoders
+
+and variant : type a. a variant -> a encoder =
+  let c0 { ctag0; _ } = encode_varint ctag0 in
+  let c1 c =
+    let arg = encode c.ctype1 in
+    fun v buf off ->
+      encode_varint c.ctag1 buf off;
+      arg v buf off
+  in
+  fun v -> fold_variant { c0; c1 } v
+
+and map : type a b. (a, b) map -> b encoder =
+ fun { x; g; _ } -> fun u buf off -> encode x (g u) buf off
+

@@ -54,9 +54,75 @@
 
 (library
  (name bin)
- (modules bin bin_type bin_size)
+ (modules
+  bin
+  bin_type
+  bin_size
+  bin_bstr
+  bin_bytes
+  bin_string
+  bin_encoder_bstr
+  bin_encoder_bytes
+  bin_decoder_bstr
+  bin_decoder_string)
  (public_name bin)
  (libraries bstr)
  (instrumentation
   (backend bisect_ppx))
  (wrapped false))
+
+(rule
+ (target bin_encoder_bstr.ml)
+ (action
+  (run
+   ./../bin/generate.exe
+   -m
+   S
+   -n
+   Bin_bstr
+   -i
+   %{dep:bin_encoder.ml.in}
+   -o
+   %{target})))
+
+(rule
+ (target bin_decoder_bstr.ml)
+ (action
+  (run
+   ./../bin/generate.exe
+   -m
+   S
+   -n
+   Bin_bstr
+   -i
+   %{dep:bin_decoder.ml.in}
+   -o
+   %{target})))
+
+(rule
+ (target bin_encoder_bytes.ml)
+ (action
+  (run
+   ./../bin/generate.exe
+   -m
+   S
+   -n
+   Bin_bytes
+   -i
+   %{dep:bin_encoder.ml.in}
+   -o
+   %{target})))
+
+(rule
+ (target bin_decoder_string.ml)
+ (action
+  (run
+   ./../bin/generate.exe
+   -m
+   S
+   -n
+   Bin_string
+   -i
+   %{dep:bin_decoder.ml.in}
+   -o
+   %{target})))
