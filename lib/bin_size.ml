@@ -1,7 +1,7 @@
 type 'a encoding = 'a Bin_type.t
-type 'a t = Static of int | Dynamic of 'a | Unknown
+type 'a t = Static of int | Dynamic of ('a -> int) | Unknown
 
-let add_size : type a. (a -> int) t -> (a -> int) t -> (a -> int) t =
+let add_size : type a. a t -> a t -> a t =
  fun a b ->
   match (a, b) with
   | Unknown, _ | _, Unknown -> Unknown
@@ -10,7 +10,7 @@ let add_size : type a. (a -> int) t -> (a -> int) t -> (a -> int) t =
   | Static n, Dynamic fn | Dynamic fn, Static n -> Dynamic (fun v -> n + fn v)
   | Dynamic f0, Dynamic f1 -> Dynamic (fun v -> f0 v + f1 v)
 
-let using : type a b. (b -> a) -> (a -> int) t -> (b -> int) t =
+let using : type a b. (b -> a) -> a t -> b t =
  fun fn0 -> function
   | Unknown -> Unknown
   | Static n -> Static n
@@ -22,7 +22,7 @@ let varint n =
   in
   go 1 n
 
-let rec size_of : type a. a Bin_type.t -> (a -> int) t = function
+let rec size_of : type a. a Bin_type.t -> a t = function
   | Primary p -> prim p
   | Record r ->
       let fn acc (Bin_type.Field field) =
@@ -33,7 +33,7 @@ let rec size_of : type a. a Bin_type.t -> (a -> int) t = function
   | Map { x; g; _ } -> using g (size_of x)
   | Seq _ -> assert false
 
-and prim : type a. a Bin_type.primary -> (a -> int) t = function
+and prim : type a. a Bin_type.primary -> a t = function
   | Char -> Static 1
   | UInt8 -> Static 1
   | Int8 -> Static 1
@@ -48,7 +48,7 @@ and prim : type a. a Bin_type.primary -> (a -> int) t = function
   | Until _ -> assert false
   | Const _ -> Static 0
 
-and variant : type a. a Bin_type.variant -> (a -> int) t =
+and variant : type a. a Bin_type.variant -> a t =
  fun v ->
   let tag_size = size_of v.vtag in
   let tag_of tag =

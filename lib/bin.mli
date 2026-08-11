@@ -267,7 +267,7 @@ module Size : sig
 
   type 'a t = private
     | Static of int
-    | Dynamic of 'a
+    | Dynamic of ('a -> int)
     | Unknown
         (** A value representing information known about the length in bytes of
             encodings produced by a particular binary codec:
@@ -278,7 +278,7 @@ module Size : sig
             - [Unknown]: this codec may produce encodings that cannot be
               efficiently pre-computed. *)
 
-  val size_of : 'a encoding -> ('a -> int) t
+  val size_of : 'a encoding -> 'a t
 end
 
 val size_of_value : 'a t -> 'a -> int option
