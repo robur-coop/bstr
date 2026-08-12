@@ -27,6 +27,7 @@ module Bstr = struct
   include Bin_encoder_bstr
 end
 
+let encode_bstr = Bstr.encode
 let decode_bstr = Bstr.decode
 let decode = String.decode
 

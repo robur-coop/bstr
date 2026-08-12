@@ -72,6 +72,8 @@ module Off : sig
   type 'w t = private int
   type abs
   type rel
+
+  val zero : 'w t
 end
 
 module Len : sig
@@ -268,6 +270,8 @@ val decode_bstr : 'a t -> Bstr.t -> pos -> 'a
 val decode : 'a t -> string -> pos -> 'a
 
 (** {2:encoder Encoder.} *)
+
+val encode_bstr : 'a t -> 'a -> Bstr.t -> pos -> unit
 
 module Size : sig
   type 'a s = private

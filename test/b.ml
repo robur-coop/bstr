@@ -5,15 +5,15 @@ let test01 =
   Test.test ~title:"cstring" ~descr @@ fun () ->
   let buf = Bstr.create 0x7ff in
   let test str =
-    let pos = ref 0 in
+    let pos = ref Bin.Off.zero in
     let len = String.length str in
     Bin.encode_bstr Bin.cstring str buf pos;
-    check (!pos == len + 1);
+    check ((!pos :> int) == len + 1);
     check (Bstr.get_uint8 buf len == 0);
     check (Bstr.sub_string buf ~off:0 ~len = str);
-    pos := 0;
+    pos := Bin.Off.zero;
     let str' = Bin.decode_bstr Bin.cstring buf pos in
-    check (!pos == len + 1);
+    check ((!pos :> int) == len + 1);
     check (str = str')
   in
   test "foo"; test "bar"
@@ -23,14 +23,14 @@ let test02 =
   Test.test ~title:"varint" ~descr @@ fun () ->
   let buf = Bstr.create 0x7ff in
   let test value expected =
-    let pos = ref 0 in
+    let pos = ref Bin.Off.zero in
     Bin.encode_bstr Bin.varint value buf pos;
     let len = String.length expected in
-    check (!pos == len);
+    check ((!pos :> int) == len);
     check (Bstr.sub_string buf ~off:0 ~len = expected);
-    pos := 0;
+    pos := Bin.Off.zero;
     let value' = Bin.decode_bstr Bin.varint buf pos in
-    check (!pos == len);
+    check ((!pos :> int) == len);
     check (value == value')
   in
   test 0 "\000";
@@ -64,14 +64,14 @@ let test03 =
     |> sealr
   in
   let test value expected =
-    let pos = ref 0 in
+    let pos = ref Bin.Off.zero in
     Bin.encode_bstr t value buf pos;
     let len = String.length expected in
-    check (!pos == len);
+    check ((!pos :> int) == len);
     check (Bstr.sub_string buf ~off:0 ~len = expected);
-    pos := 0;
+    pos := Bin.Off.zero;
     let value' = Bin.decode_bstr t buf pos in
-    check (!pos = len);
+    check ((!pos :> int) == len);
     check (value = value')
   in
   test (0l, 0L) (String.make 24 '\000');
