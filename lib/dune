@@ -59,6 +59,7 @@
   bin_type
   bin_size
   bin_bstr
+  bin_error
   bin_bytes
   bin_string
   bin_encoder_bstr

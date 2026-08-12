@@ -17,8 +17,8 @@
 [@@@warning "-unused-field"]
 
 include Bin_type
-
 module Size = Bin_size
+module Error = Bin_error
 module Bytes = Bin_encoder_bytes
 module String = Bin_decoder_string
 
