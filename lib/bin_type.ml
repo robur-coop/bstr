@@ -164,7 +164,7 @@ and ('a, 'b) case1 = {
   ; c1: 'b -> 'a
 }
 
-and 'a record = { rwit: 'a Witness.t; rfields: 'a fields_and_constr }
+and 'a record = { rname: string; rfields: 'a fields_and_constr }
 
 and 'a fields_and_constr =
   | Fields : ('a, 'b) fields * 'b -> 'a fields_and_constr
@@ -173,7 +173,7 @@ and ('a, 'b) fields =
   | F0 : ('a, 'a) fields
   | F1 : ('a, 'b) field * ('a, 'c) fields -> ('a, 'b -> 'c) fields
 
-and ('a, 'b) field = { ftype: 'b t; fget: 'a -> 'b }
+and ('a, 'b) field = { fid: int; fname: string; ftype: 'b t; fget: 'a -> 'b }
 
 and 'a variant = {
     vwit: 'a Witness.t

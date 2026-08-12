@@ -59,10 +59,17 @@ let bstr len = Primary (Bstr len)
 let cstring = Primary CString
 let until byte = Primary (Until byte)
 
-type ('a, 'b, 'c) open_record = ('a, 'c) fields -> 'b * ('a, 'b) fields
+(* record *)
 
-let field ftype fget = { ftype; fget }
-let record : 'b -> ('a, 'b, 'b) open_record = fun c fs -> (c, fs)
+type ('a, 'b, 'c) open_record = ('a, 'c) fields -> string * 'b * ('a, 'b) fields
+
+let fid = Atomic.make 0
+
+let field ?name:(fname = "") ftype fget =
+  { fid= Atomic.fetch_and_add fid 1; fname; ftype; fget }
+
+let record : ?name:string -> 'b -> ('a, 'b, 'b) open_record =
+ fun ?(name = "") c fs -> (name, c, fs)
 
 let app : type a b c d.
     (a, b, c -> d) open_record -> (a, c) field -> (a, b, d) open_record =
@@ -70,10 +77,18 @@ let app : type a b c d.
 
 let sealr : type a b. (a, b, a) open_record -> a t =
  fun r ->
-  let c, fs = r F0 in
-  let rwit = Witness.make () in
-  let sealed = { rwit; rfields= Fields (fs, c) } in
-  Record sealed
+  let rname, c, fs = r F0 in
+  let rec renumber : type x y. int -> (x, y) fields -> (x, y) fields =
+   fun i -> function
+     | F0 -> F0
+     | F1 (field, fs) ->
+         let field =
+           if field.fname = "" then { field with fname= "#" ^ string_of_int i }
+           else field
+         in
+         F1 (field, renumber (succ i) fs)
+  in
+  Record { rname; rfields= Fields (renumber 0 fs, c) }
 
 let ( |+ ) = app
 

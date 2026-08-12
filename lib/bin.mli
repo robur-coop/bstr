@@ -178,7 +178,7 @@ type ('a, 'b, 'c) open_record
     {!val:(|+)} operator. An open record initially stisfies ['c = 'b] and can be
     {{!val:sealr} sealed} once ['c = 'a]. *)
 
-val record : 'b -> ('a, 'b, 'b) open_record
+val record : ?name:string -> 'b -> ('a, 'b, 'b) open_record
 (** [record f] is an incomplete representation of the record of type ['a] with
     constructor [f]. To complete the representation, add fields with {!val:(|+)}
     and then seal the record with {!val:sealr}. *)
@@ -187,7 +187,7 @@ type ('a, 'b) field
 (** The type for fields holding values of type ['b] and belonging to a record of
     type ['a]. *)
 
-val field : 'a t -> ('b -> 'a) -> ('b, 'a) field
+val field : ?name:string -> 'a t -> ('b -> 'a) -> ('b, 'a) field
 (** [field n t g] is the representation of the field called [n] of type [t] with
     getter [g]. For instance:
 
