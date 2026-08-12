@@ -1,16 +1,20 @@
+module Len = Bin_type.Len
+module Off = Bin_type.Off
+
 type kind =
-  | Truncated of { need: int; have: int }
+  | Truncated of { need: Len.t; have: Len.t }
   | Out_of_range of { kind: string; value: string }
   | Unexpected_tag of { tag: int; expected: int list }
   | Length_mismatch of { expected: int; got: int }
   | Msg of string
 
-type t = { context: string list; offset: int; kind: kind }
+type t = { context: string list; offset: Off.abs Off.t; kind: kind }
 
 let pp_kind ppf = function
   | Truncated { need; have } ->
-      Format.fprintf ppf "truncated input: %d byte(s) needed, %d available" need
-        have
+      Format.fprintf ppf "truncated input: %d byte(s) needed, %d available"
+        (need :> int)
+        (have :> int)
   | Out_of_range { kind; value } ->
       Format.fprintf ppf "value %s is out of range for %s" value kind
   | Unexpected_tag { tag; expected } ->
@@ -23,7 +27,7 @@ let pp_kind ppf = function
   | Msg msg -> Format.pp_print_string ppf msg
 
 let pp ppf { context; offset; kind } =
-  Format.fprintf ppf "@[<v>%a@, at byte %d" pp_kind kind offset;
+  Format.fprintf ppf "@[<v>%a@, at byte %d" pp_kind kind (offset :> int);
   if context <> [] then Format.fprintf ppf "@,in %s" (String.concat "." context);
   Format.fprintf ppf "@]"
 
@@ -33,7 +37,7 @@ let to_string t = Format.asprintf "%a" pp t
 
 let msgf fmt =
   let fn msg =
-    raise_notrace (Error { context= []; offset= 0; kind= Msg msg })
+    raise_notrace (Error { context= []; offset= Off.zero; kind= Msg msg })
   in
   Format.kasprintf fn fmt
 
@@ -51,3 +55,7 @@ let reraise_in name exn =
   match exn with
   | Error e -> raise_notrace (Error { e with context= name :: e.context })
   | exn -> raise exn
+
+let[@inline] need_bytes ~limit ~offset ~need =
+  if Off.(offset +> need > limit) then
+    truncated ~offset ~need ~have:(Bin_type.have ~limit ~offset)

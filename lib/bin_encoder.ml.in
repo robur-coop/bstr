@@ -159,6 +159,25 @@ and static_record_writer_at : type a. rel -> a record -> a swrite option =
 and static_writer : type a. a t -> a swrite option =
   fun t -> static_writer_for Off.zero Fun.id t
 
+let encoder : type a. a t -> a -> S.t -> pos -> unit =
+  fun t -> match t with
+    | Record r ->
+      begin match (Bin_size.make t).layout, static_record_cells Off.zero r with
+      | Some n, Some cells ->
+        let k = Array.length cells in
+        let fn v buf pos =
+          let offset = !pos in
+          let limit = Off.v (S.length buf) in
+          if Off.(offset +> n > limit)
+          then Bin_error.truncated ~offset ~need:n ~have:(have ~limit ~offset);
+          for i = 0 to k - 1 do
+            (Array.unsafe_get cells i) v buf offset
+          done;
+          pos := Off.(offset +> n) in
+        fn
+      | _ -> assert false end
+   | _ -> assert false
+
 (*
 type 'a encoder = 'a -> S.t -> pos -> unit
 

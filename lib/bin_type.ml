@@ -91,6 +91,7 @@ module Off : sig
   val at : abs t -> rel t -> abs t
   val from_base : rel t -> Len.t
   val of_len : Len.t -> 'w t
+  val incr : 'w t ref -> unit
 end = struct
   type _ t = int
   type abs
@@ -107,13 +108,16 @@ end = struct
   let[@inline] at (base : int) (delta : int) = base + delta
   let[@inline] from_base (delta : int) = Len.v delta
   let[@inline] of_len (n : Len.t) = (n :> int)
+  let[@inline] incr ref = incr ref
 
   let[@inline] v n =
     if n < 0 then invalid_arg "Bin_type.Off.v";
     n
 end
 
-type pos = int ref
+let[@inline] have ~limit ~offset = Off.(limit -- offset)
+
+type pos = Off.abs Off.t ref
 type endianness = Big_endian | Little_endian | Native_endian
 
 type _ t =

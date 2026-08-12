@@ -68,7 +68,17 @@
     go directly to OCaml values, which is generally more pleasant to manipulate
     with OCaml than to make C stubs. *)
 
-type pos = int ref
+module Off : sig
+  type 'w t = private int
+  type abs
+  type rel
+end
+
+module Len : sig
+  type t = private int
+end
+
+type pos = Off.abs Off.t ref
 type 'a t
 
 (** {1:primitives Primitives.} *)

@@ -21,89 +21,89 @@ let decode_varint bstr pos =
   !res
 [@@inline always]
 
-let decode_char bstr pos =
+let decode_char bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  incr pos; S.get bstr idx
+  Off.incr pos; S.get bstr (idx :> int)
 [@@inline always]
 
-let decode_uint8 bstr pos =
+let decode_uint8 bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  incr pos; S.get_uint8 bstr idx
+  Off.incr pos; S.get_uint8 bstr (idx :> int)
 [@@inline always]
 
-let decode_int8 bstr pos =
+let decode_int8 bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  incr pos; S.get_int8 bstr idx
+  Off.incr pos; S.get_int8 bstr (idx :> int)
 [@@inline always]
 
-let decode_uint16 e bstr pos =
+let decode_uint16 e bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  pos := !pos + 2;
+  pos := Off.(!pos +> Len.v 2);
   match e with
-  | Big_endian -> S.get_uint16_be bstr idx
-  | Little_endian -> S.get_uint16_le bstr idx
-  | Native_endian -> S.get_uint16_ne bstr idx
+  | Big_endian -> S.get_uint16_be bstr (idx :> int)
+  | Little_endian -> S.get_uint16_le bstr (idx :> int)
+  | Native_endian -> S.get_uint16_ne bstr (idx :> int)
 [@@inline always]
 
-let decode_int16 endian bstr pos =
+let decode_int16 endian bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  pos := !pos + 2;
+  pos := Off.(!pos +> Len.v 2);
   match endian with
-  | Big_endian -> S.get_int16_be bstr idx
-  | Little_endian -> S.get_int16_le bstr idx
-  | Native_endian -> S.get_int16_ne bstr idx
+  | Big_endian -> S.get_int16_be bstr (idx :> int)
+  | Little_endian -> S.get_int16_le bstr (idx :> int)
+  | Native_endian -> S.get_int16_ne bstr (idx :> int)
 [@@inline always]
 
-let decode_int32 endian bstr pos =
+let decode_int32 endian bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  pos := !pos + 4;
+  pos := Off.(!pos +> Len.v 4);
   match endian with
-  | Big_endian -> S.get_int32_be bstr idx
-  | Little_endian -> S.get_int32_le bstr idx
-  | Native_endian -> S.get_int32_ne bstr idx
+  | Big_endian -> S.get_int32_be bstr (idx :> int)
+  | Little_endian -> S.get_int32_le bstr (idx :> int)
+  | Native_endian -> S.get_int32_ne bstr (idx :> int)
 [@@inline always]
 
-let decode_int64 endian bstr pos =
+let decode_int64 endian bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  pos := !pos + 8;
+  pos := Off.(!pos +> Len.v 8);
   match endian with
-  | Big_endian -> S.get_int64_be bstr idx
-  | Little_endian -> S.get_int64_le bstr idx
-  | Native_endian -> S.get_int64_ne bstr idx
+  | Big_endian -> S.get_int64_be bstr (idx :> int)
+  | Little_endian -> S.get_int64_le bstr (idx :> int)
+  | Native_endian -> S.get_int64_ne bstr (idx :> int)
 [@@inline always]
 
-let decode_bytes len bstr pos =
-  let off = !pos in
-  pos := !pos + len;
+let decode_bytes len bstr (pos : Off.abs Off.t ref) =
+  let off = (!pos :> int) in
+  pos := Off.(!pos +> Len.v len);
   S.sub_string bstr ~off ~len
 [@@inline always]
 
-let decode_bstr len bstr pos =
+let decode_bstr len bstr (pos : Off.abs Off.t ref) =
   if len == 0 then S.empty
   else begin
-    let off = !pos in
-    pos := !pos + len;
+    let off = (!pos :> int) in
+    pos := Off.(!pos +> Len.v len);
     S.sub bstr ~off ~len
   end
 [@@inline always]
 
-let decode_cstring bstr pos =
-  let off = !pos in
-  while S.get_uint8 bstr !pos != 0 do
-    incr pos
+let decode_cstring bstr (pos : Off.abs Off.t ref) =
+  let off = (!pos :> int) in
+  while S.get_uint8 bstr (!pos :> int) != 0 do
+    Off.incr pos
   done;
-  let len = !pos - off in
+  let len = (!pos :> int) - off in
   let str = S.sub_string bstr ~off ~len in
-  incr pos; str
+  Off.incr pos; str
 [@@inline always]
 
-let decode_until byte bstr pos =
+let decode_until byte bstr (pos : Off.abs Off.t ref) =
   let predicate byte' = byte != byte' in
-  let off = !pos in
-  while predicate (S.get bstr !pos) == false do
-    incr pos
+  let off = (!pos :> int) in
+  while predicate (S.get bstr (!pos :> int)) == false do
+    Off.incr pos
   done;
-  let len = !pos - off in
+  let len = (!pos :> int) - off in
   S.sub_string bstr ~off ~len
 [@@inline always]
 
@@ -123,7 +123,7 @@ and prim : type a. a primary -> a decoder = function
   | Int32 e -> decode_int32 e
   | Int64 e -> decode_int64 e
   | Bytes len -> decode_bytes len
-  | Var_int -> decode_varint
+  | Var_int -> assert false
   | CString -> decode_cstring
   | Until p -> decode_until p
   | Bstr _ -> assert false
@@ -147,7 +147,7 @@ and record : type a. a record -> a decoder =
 
 and variant : type a. a variant -> a decoder =
  fun v ->
-  let decoders : a decoder array =
+  let _decoders : a decoder array =
     let fn = function
       | C0 c -> fun _ _ -> c.c0
       | C1 c ->
@@ -156,6 +156,4 @@ and variant : type a. a variant -> a decoder =
     in
     Array.map fn v.vcases
   in
-  fun bstr pos ->
-    let i = decode_varint bstr pos in
-    decoders.(i) bstr pos
+  fun _bstr _pos -> assert false
