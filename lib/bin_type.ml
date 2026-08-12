@@ -203,7 +203,6 @@ struct
     | F1 (f, fs) -> folder.cons f (fold folder fs)
 end
 
-(* TODO(dinosaure): it's not the right place... *)
 let rec a_fields : type a b. (a, b) fields -> a a_field list = function
   | F0 -> []
   | F1 (x, r) -> Field x :: a_fields r
