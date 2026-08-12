@@ -81,6 +81,8 @@ module Len : sig
 end
 
 type pos = Off.abs Off.t ref
+type len
+
 type 'a t
 
 (** {1:primitives Primitives.} *)
@@ -132,10 +134,10 @@ val neint64 : int64 t
 
 val varint : int t
 
-val bytes : int -> string t
+val bytes : len -> string t
 (** [bytes n] is a representation of a bytes sequence of [n] byte(s). *)
 
-val bstr : int -> Bstr.t t
+val bstr : len -> Bstr.t t
 (** [bstr n] is a representation of a bigstring of [n] byte(s). *)
 
 val cstring : string t

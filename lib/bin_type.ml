@@ -136,10 +136,9 @@ and _ primary =
   | Int32 : endianness -> int32 primary
   | Int64 : endianness -> int64 primary
   | Var_int : int primary
-  | Bytes : int -> string primary
-  | CString : string primary
+  | Bytes : len -> string primary
+  | Bstr : len -> Bstr.t primary
   | Until : char -> string primary
-  | Bstr : int -> Bstr.t primary
   | Const : 'a -> 'a primary
 
 and len = Fixed of int | Prefix of int t | Delim of char | Rest

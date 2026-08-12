@@ -58,7 +58,7 @@ let neint64 = Primary (Int64 Native_endian)
 let varint = Primary Var_int
 let bytes len = Primary (Bytes len)
 let bstr len = Primary (Bstr len)
-let cstring = Primary CString
+let cstring = Primary (Bytes (Delim '\000'))
 let until byte = Primary (Until byte)
 
 (* record *)
