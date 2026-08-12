@@ -228,7 +228,7 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
         fun v buf limit pos -> wr (g v) buf limit pos
     | Record r -> go_record r
     | Variant v -> go_variant v
-    | Seq _s -> assert false
+    | Seq s -> go_seq s
   and go_record : type a. a record -> a -> S.t -> abs -> pos -> unit =
    fun r ->
     let rname = if r.rname = "" then "record" else r.rname in
@@ -309,6 +309,30 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
     fun value buf limit pos ->
       try dispatch value buf limit pos
       with exn -> Bin_error.reraise_in vname exn
+  and go_seq : type a b. (a, b) seq -> b -> S.t -> abs -> pos -> unit =
+   fun { slen; selt; skind } ->
+    let elt = go selt in
+    let count : b -> int =
+      match skind with Sarray -> Array.length | Slist -> List.length
+    in
+    let iter : (a -> unit) -> b -> unit =
+      match skind with Sarray -> Array.iter | Slist -> List.iter
+    in
+    match slen with
+    | Fixed n ->
+        fun v buf limit pos ->
+          let got = count v in
+          if got <> n then
+            Bin_error.length_mismatch ~offset:!pos ~expected:n ~got;
+          iter (fun x -> elt x buf limit pos) v
+    | Prefix t ->
+        let wn = go t in
+        fun v buf limit pos ->
+          wn (count v) buf limit pos;
+          iter (fun x -> elt x buf limit pos) v
+    | Rest -> fun v buf limit pos -> iter (fun x -> elt x buf limit pos) v
+    | Delim _ ->
+        assert false (* NOTE(dinosaure): see [Bin.seq] and [Bin.list] *)
   and prim : type a. a primary -> a -> S.t -> abs -> pos -> unit =
    fun p ->
     match p with
