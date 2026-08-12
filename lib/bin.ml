@@ -16,6 +16,8 @@
 
 [@@@warning "-unused-field"]
 
+let invalid_argf fmt = Format.kasprintf invalid_arg fmt
+
 include Bin_type
 module Size = Bin_size
 module Error = Bin_error
@@ -97,30 +99,55 @@ let ( |+ ) = app
 type 'a case_p = 'a case_v
 type ('a, 'b) case = int -> 'a a_case * 'b
 
-let case0 c0 ctag0 =
-  let c = { ctag0; c0 } in
+let case0 ?name ?tag c0 idx =
+  let ctag0 = match tag with Some t -> t | None -> idx in
+  let default = "#" ^ string_of_int idx in
+  let cname0 = Option.value ~default name in
+  let c = { ctag0; cidx0= idx; cname0; c0 } in
   (C0 c, CV0 c)
 
-let case1 : type a b. b t -> (b -> a) -> (a, b -> a case_p) case =
- fun ctype1 c1 ctag1 ->
+let case1 : type a b.
+    ?name:string -> ?tag:int -> b t -> (b -> a) -> (a, b -> a case_p) case =
+ fun ?name ?tag ctype1 c1 idx ->
+  let ctag1 = match tag with Some t -> t | None -> idx in
+  let default = "#" ^ string_of_int idx in
+  let cname1 = Option.value ~default name in
   let cwitn1 : b Witness.t = Witness.make () in
-  let c = { ctag1; ctype1; cwitn1; c1 } in
+  let c = { ctag1; cidx1= idx; cname1; ctype1; cwitn1; c1 } in
   (C1 c, fun v -> CV1 (c, v))
 
-type ('a, 'b, 'c) open_variant = 'a a_case list -> 'c * 'a a_case list
+type ('a, 'b, 'c) open_variant = 'a a_case list -> string * 'c * 'a a_case list
 
-let variant c vs = (c, vs)
+let variant ?(name = "") c vs = (name, c, vs)
 
 let app v c cs =
-  let fc, cs = v cs in
+  let name, fc, cs = v cs in
   let c, f = c (List.length cs) in
-  (fc f, c :: cs)
+  (name, fc f, c :: cs)
+
+let tag_of_case = function C0 { ctag0; _ } -> ctag0 | C1 { ctag1; _ } -> ctag1
+
+let name_of_case = function
+  | C0 { cname0; _ } -> cname0
+  | C1 { cname1; _ } -> cname1
 
 let sealv ?tag:(vtag = varint) v =
-  let vget, vcases = v [] in
-  let vwit = Witness.make () in
+  let vname, vget, vcases = v [] in
   let vcases = Array.of_list (List.rev vcases) in
-  Variant { vtag; vwit; vcases; vget }
+  let seen = Hashtbl.create 16 in
+  let fn c =
+    let t = tag_of_case c in
+    if t < 0 then
+      invalid_argf "Bin.sealv: case %s has a negative tag (%d)" (name_of_case c)
+        t;
+    match Hashtbl.find_opt seen t with
+    | None -> Hashtbl.add seen t (name_of_case c)
+    | Some other ->
+        invalid_argf "Bin.sealv: cases %s and %s sahre the tag %d" other
+          (name_of_case c) t
+  in
+  Array.iter fn vcases;
+  Variant { vname; vtag; vcases; vget }
 
 let ( |~ ) = app
 

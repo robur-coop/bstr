@@ -155,10 +155,12 @@ and _ case_v =
   | CV0 : 'a case0 -> 'a case_v
   | CV1 : ('a, 'b) case1 * 'b -> 'a case_v
 
-and 'a case0 = { ctag0: int; c0: 'a }
+and 'a case0 = { ctag0: int; cidx0: int; cname0: string; c0: 'a }
 
 and ('a, 'b) case1 = {
     ctag1: int
+  ; cidx1: int
+  ; cname1: string
   ; ctype1: 'b t
   ; cwitn1: 'b Witness.t
   ; c1: 'b -> 'a
@@ -176,7 +178,7 @@ and ('a, 'b) fields =
 and ('a, 'b) field = { fid: int; fname: string; ftype: 'b t; fget: 'a -> 'b }
 
 and 'a variant = {
-    vwit: 'a Witness.t
+    vname: string
   ; vcases: 'a a_case array
   ; vget: 'a -> 'a case_v
   ; vtag: int t

@@ -77,6 +77,9 @@ let w_i64_ne delta get = (); fun v buf off ->
 [@@inline always]
 
 let w_ignore3 _ _ _ = ()
+
+(* XXX(dinosaure): the same but for an arity of 4. *)
+
 let w_ignore4 _ _ _ _ = ()
 
 let[@inline always] w_1 set = (); fun v buf limit pos ->
@@ -205,7 +208,7 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
       let wr = go x in
       fun v buf limit pos -> wr (g v) buf limit pos
     | Record r -> go_record r
-    | Variant _v -> assert false
+    | Variant v -> go_variant v
     | Seq _s -> assert false
   and go_record : type a. a record -> a -> S.t -> abs -> pos -> unit =
    fun r ->
@@ -263,6 +266,24 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
     let name = field.fname in
     fun v buf limit pos ->
       try wr v buf limit pos with exn -> Bin_error.reraise_in name exn
+  and go_variant : type a. a variant -> a -> S.t -> abs -> pos -> unit =
+   fun v ->
+    let tag = go v.vtag in
+    let vname = if v.vname = "" then "variant" else v.vname in
+    let c0 c buf limit pos = tag c.ctag0 buf limit pos in
+    let c1 : type b. (a, b) case1 -> b -> S.t -> abs -> pos -> unit =
+      fun c ->
+        let wr = go c.ctype1 in
+        let name = c.cname1 in
+        fun x buf limit pos ->
+          tag c.ctag1 buf limit pos;
+          try wr x buf limit pos
+          with exn -> Bin_error.reraise_in name exn in
+      let dispatch = fold_variant { Case_folder.c0; c1 } v in
+      fun value buf limit pos ->
+        try dispatch value buf limit pos
+        with exn ->
+          Bin_error.reraise_in vname exn
   and prim : type a. a primary -> a -> S.t -> abs -> pos -> unit =
    fun p ->
     match p with

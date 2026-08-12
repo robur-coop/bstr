@@ -222,7 +222,7 @@ type ('a, 'b, 'c) open_variant
     using the {!val:(|~)} operator. An open variant initially satisfies
     ['c = 'b] and can be {{!val:sealv} sealed} once ['c = 'a]. *)
 
-val variant : 'b -> ('a, 'b, 'b) open_variant
+val variant : ?name:string -> 'b -> ('a, 'b, 'b) open_variant
 (** [variant n p] is an incomplete representation of the variant type called [n]
     of type ['a] using [p] to deconstruct values. To complete the
     representation, add cases with {!val:(|~)} and then seal the variant with
@@ -235,7 +235,7 @@ type ('a, 'b) case
 type 'a case_p
 (** The type for representing patterns for a variant of type ['a]. *)
 
-val case0 : 'a -> ('a, 'a case_p) case
+val case0 : ?name:string -> ?tag:int -> 'a -> ('a, 'a case_p) case
 (** [case0 v] is a representation of a variant constructor [v] with no
     arguments. For instance:
 
@@ -245,7 +245,8 @@ val case0 : 'a -> ('a, 'a case_p) case
     let foo = case0 Foo
     ]} *)
 
-val case1 : 'b t -> ('b -> 'a) -> ('a, 'b -> 'a case_p) case
+val case1 :
+  ?name:string -> ?tag:int -> 'b t -> ('b -> 'a) -> ('a, 'b -> 'a case_p) case
 (** [case1 n t c] is a representation of a variant constructor [c] with an
     argument of type [t]. For instances:
 
