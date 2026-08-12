@@ -260,9 +260,7 @@ val decode : 'a t -> string -> pos -> 'a
 (** {2:encoder Encoder.} *)
 
 module Size : sig
-  type 'a encoding = 'a t
-
-  type 'a t = private
+  type 'a s = private
     | Static of int
     | Dynamic of ('a -> int)
     | Unknown
@@ -275,7 +273,7 @@ module Size : sig
             - [Unknown]: this codec may produce encodings that cannot be
               efficiently pre-computed. *)
 
-  val size_of : 'a encoding -> 'a t
+  type 'a t
 end
 
 val size_of_value : 'a t -> 'a -> int option

@@ -3,75 +3,82 @@ include Bin_type
 type abs = Off.abs Off.t
 type rel = Off.rel Off.t
 
+[@@@ocamlformat "-disable"]
+
 (* XXX(dinosaure): It's rather ugly, but it's necessary for performance. We need
    to be able to generate a function that allows writing, and this function must
    not contain any pattern matching (particularly regarding endianness). We need
    to move the pattern matching out of the write operation (and find it, in
-   particular, in the [static_primary_writer_for] function). *)
+   particular, in the [static_primary_writer_for] function).
 
-let unsafe_set delta get v buf off =
+   The trick [let _ = (); fun _ ->] is important here to ensure that the
+   function has an arity of 3 when it is specialised. *)
+
+let w_char delta get = (); fun v buf off ->
   S.unsafe_set buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_uint8 delta get v buf off =
+let w_ui8 delta get = (); fun v buf off ->
   S.unsafe_set_uint8 buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_int8 delta get v buf off =
+let w_i8 delta get = (); fun v buf off ->
   S.unsafe_set_int8 buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_uint16_le delta get v buf off =
+let w_ui16_le delta get = (); fun v buf off ->
   S.unsafe_set_uint16_le buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_uint16_be delta get v buf off =
+let w_ui16_be delta get = (); fun v buf off ->
   S.unsafe_set_uint16_be buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_uint16_ne delta get v buf off =
+let w_ui16_ne delta get = (); fun v buf off ->
   S.unsafe_set_uint16_ne buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_int16_le delta get v buf off =
+let w_i16_le delta get = (); fun v buf off ->
   S.unsafe_set_int16_le buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_int16_be delta get v buf off =
+let w_i16_be delta get = (); fun v buf off ->
   S.unsafe_set_int16_be buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_int16_ne delta get v buf off =
+let w_i16_ne delta get = (); fun v buf off ->
   S.unsafe_set_int16_ne buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_int32_le delta get v buf off =
+let w_i32_le delta get = (); fun v buf off ->
   S.unsafe_set_int32_le buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_int32_be delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int32_be buf (Off.at off delta :> int) (get v)
+let w_i32_be delta get = (); fun v buf off ->
+  S.unsafe_set_int32_be buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_int32_ne delta get v buf off =
+let w_i32_ne delta get = (); fun v buf off ->
   S.unsafe_set_int32_ne buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_int64_le delta get v buf off =
+let w_i64_le delta get = (); fun v buf off ->
   S.unsafe_set_int64_le buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_int64_be delta get =
- fun v buf off -> S.unsafe_set_int64_be buf (Off.at off delta :> int) (get v)
+let w_i64_be delta get = (); fun v buf off ->
+  S.unsafe_set_int64_be buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let unsafe_set_int64_ne delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int64_ne buf (Off.at off delta :> int) (get v)
+let w_i64_ne delta get = (); fun v buf off ->
+  S.unsafe_set_int64_ne buf (Off.at off delta :> int) (get v)
 [@@inline always]
+
+let w_ignore _ _ _ = ()
 
 (* Thanks, god! *)
+
+[@@@ocamlformat "-enable"]
 
 type 'a fwrite = 'a -> S.t -> int -> int -> pos -> unit
 type 'a swrite = 'a -> S.t -> abs -> unit
@@ -93,23 +100,23 @@ and static_primary_writer_for : type a b.
     rel -> (a -> b) -> b primary -> a swrite option =
  fun delta get t ->
   match t with
-  | Const _ -> Some (fun _ _ _ -> ())
-  | Char -> Some (unsafe_set delta get)
-  | UInt8 -> Some (unsafe_set_uint8 delta get)
-  | Int8 -> Some (unsafe_set_int8 delta get)
-  | UInt16 Big_endian -> Some (unsafe_set_uint16_be delta get)
-  | UInt16 Little_endian -> Some (unsafe_set_uint16_le delta get)
-  | UInt16 Native_endian -> Some (unsafe_set_uint16_ne delta get)
-  | Int16 Big_endian -> Some (unsafe_set_int16_be delta get)
-  | Int16 Little_endian -> Some (unsafe_set_int16_le delta get)
-  | Int16 Native_endian -> Some (unsafe_set_int16_ne delta get)
-  | Int32 Big_endian -> Some (unsafe_set_int32_be delta get)
-  | Int32 Little_endian -> Some (unsafe_set_int32_le delta get)
-  | Int32 Native_endian -> Some (unsafe_set_int32_ne delta get)
-  | Int64 Big_endian -> Some (unsafe_set_int64_be delta get)
-  | Int64 Little_endian -> Some (unsafe_set_int64_le delta get)
-  | Int64 Native_endian -> Some (unsafe_set_int64_ne delta get)
-  | _ -> None
+  | Const _ -> Some w_ignore
+  | Char -> Some (w_char delta get)
+  | UInt8 -> Some (w_ui8 delta get)
+  | Int8 -> Some (w_i8 delta get)
+  | UInt16 Big_endian -> Some (w_ui16_be delta get)
+  | UInt16 Little_endian -> Some (w_ui16_le delta get)
+  | UInt16 Native_endian -> Some (w_ui16_ne delta get)
+  | Int16 Big_endian -> Some (w_i16_be delta get)
+  | Int16 Little_endian -> Some (w_i16_le delta get)
+  | Int16 Native_endian -> Some (w_i16_ne delta get)
+  | Int32 Big_endian -> Some (w_i32_be delta get)
+  | Int32 Little_endian -> Some (w_i32_le delta get)
+  | Int32 Native_endian -> Some (w_i32_ne delta get)
+  | Int64 Big_endian -> Some (w_i64_be delta get)
+  | Int64 Little_endian -> Some (w_i64_le delta get)
+  | Int64 Native_endian -> Some (w_i64_ne delta get)
+  | Var_int | Bytes _ | CString | Until _ | Bstr _ -> None
 
 (* NOTE(dinosaure): here, we compile an array which contains encoders for each
    field of the record. Compilation is only possible if the size of the record's
@@ -148,6 +155,9 @@ and static_record_writer_at : type a. rel -> a record -> a swrite option =
         done
       in
       Some fn
+
+and static_writer : type a. a t -> a swrite option =
+  fun t -> static_writer_for Off.zero Fun.id t
 
 (*
 type 'a encoder = 'a -> S.t -> pos -> unit

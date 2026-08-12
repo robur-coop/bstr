@@ -18,12 +18,7 @@
 
 include Bin_type
 
-module Size = struct
-  type 'a encoding = 'a t
-
-  include Bin_size
-end
-
+module Size = Bin_size
 module Bytes = Bin_encoder_bytes
 module String = Bin_decoder_string
 
