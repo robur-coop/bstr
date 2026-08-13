@@ -108,16 +108,22 @@ and prim : type a. a Bin_type.primary -> a t = function
   | Const _ -> static 0
 
 and payload : type a. Bin_type.len -> (a -> int) -> a t =
-  fun l length -> match l with
-    | Fixed n -> static n
-    | Rest -> dynamic length
-    | Delim _ -> dynamic (fun v -> length v + 1)
-    | Prefix t -> begin match (make t).of_value with
+ fun l length ->
+  match l with
+  | Fixed n -> static n
+  | Rest -> dynamic length
+  | Delim _ -> dynamic (fun v -> length v + 1)
+  | Prefix t ->
+      begin match (make t).of_value with
       | Static n -> dynamic (fun v -> n + length v)
       | Dynamic fn ->
-        let fn v = let n = (length v) in fn n + n in
-        dynamic fn
-      | Unknown -> unknown end
+          let fn v =
+            let n = length v in
+            fn n + n
+          in
+          dynamic fn
+      | Unknown -> unknown
+      end
 
 and variant : type a. a Bin_type.variant -> a t =
  fun v ->

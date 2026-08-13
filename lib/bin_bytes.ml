@@ -1,7 +1,10 @@
 include Bytes
 
-external unsafe_get_char : bytes -> int -> char = "%bytes_unsafe_get"
-external unsafe_set_char : bytes -> int -> char -> unit = "%bytes_unsafe_set"
+(* NOTE(dinosaure): see our comment on [Bin_bstr] to understand the purpose of
+   this module. *)
+
+external unsafe_get : bytes -> int -> char = "%bytes_unsafe_get"
+external unsafe_set : bytes -> int -> char -> unit = "%bytes_unsafe_set"
 external unsafe_get_uint16_ne : bytes -> int -> int = "%caml_bytes_get16u"
 
 external unsafe_set_uint16_ne : bytes -> int -> int -> unit
@@ -21,10 +24,8 @@ external swap16 : int -> int = "%bswap16"
 external swap32 : int32 -> int32 = "%bswap_int32"
 external swap64 : int64 -> int64 = "%bswap_int64"
 
-let unsafe_get_uint8 buf i = Char.code (unsafe_get_char buf i) [@@inline]
-
-let unsafe_set_uint8 buf i v = unsafe_set_char buf i (Char.unsafe_chr v)
-[@@inline]
+let unsafe_get_uint8 buf i = Char.code (unsafe_get buf i) [@@inline]
+let unsafe_set_uint8 buf i v = unsafe_set buf i (Char.unsafe_chr v) [@@inline]
 
 let unsafe_get_int8 buf i =
   (unsafe_get_uint8 buf i lsl (Sys.int_size - 8)) asr (Sys.int_size - 8)

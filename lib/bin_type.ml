@@ -69,6 +69,7 @@ end = struct
   let[@inline] ( = ) (a : int) (b : int) = a = b
   let[@inline] ( < ) (a : int) (b : int) = a < b
   let[@inline] ( <= ) (a : int) (b : int) = a <= b
+
   external unsafe : int -> t = "%identity"
 
   let[@inline] v n =
@@ -112,6 +113,7 @@ end = struct
   let[@inline] from_base (delta : int) = Len.v delta
   let[@inline] of_len (n : Len.t) = (n :> int)
   let[@inline] incr ref = incr ref
+
   external unsafe : int -> _ t = "%identity"
 
   let[@inline] v n =

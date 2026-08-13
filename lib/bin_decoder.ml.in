@@ -89,6 +89,21 @@ and static_slow : type a b. b -> (a, b) sreaders -> S.t -> abs -> a
       static_slow (ctor v) rest b o
 [@@@ocamlformat "enable"]
 
+let read_varint buf limit pos =
+  let res = ref 0 and bits = ref 0 and continue = ref true in
+  let start = !pos in
+  while !continue do
+    Bin_error.need_bytes ~limit ~offset:!pos ~need:Len.one;
+    let byte = S.unsafe_get_uint8 buf (!pos :> int) in
+    (pos := Off.(!pos +> Len.one));
+    res := !res lor ((byte land 0x7f) lsl !bits);
+    bits := !bits + 7;
+    if byte land 0x80 == 0 then continue := false
+    else if !bits >= Sys.int_size then
+      Bin_error.out_of_range ~offset:start ~kind:"varint" ~value:"overflow"
+  done;
+  !res
+
 let narrow ~(win : Len.t) ~(delta : rel) ~(w : Len.t) ~signed ~big ~fallback =
   let win = Len.to_int win and delta = Off.to_int delta and w = Len.to_int w in
   if win < 8 || delta + w > win then Ofun fallback
@@ -106,7 +121,49 @@ let narrow ~(win : Len.t) ~(delta : rel) ~(w : Len.t) ~signed ~big ~fallback =
 let rec static_reader_at : type a.
     win:Len.t -> rel -> a t -> a static_operation option =
  fun ~win delta t ->
-  match t with Primary p -> static_primary_at ~win delta p | _ -> None
+  match t with
+  | Primary p -> static_primary_at ~win delta p
+  | Seq { slen= Fixed n; selt; skind } -> begin
+      let len = (Bin_size.make selt).layout in
+      let operation = static_reader_at ~win:Len.zero Off.zero selt in
+      match (operation, len) with
+      | Some operation, Some w ->
+          Some (Ofun (static_seq ~delta ~n ~w operation skind))
+      | _ -> None
+    end
+  | _ -> None
+
+and static_seq : type a b.
+       delta:rel
+    -> n:int
+    -> w:Len.t
+    -> a static_operation
+    -> (a, b) seq_kind
+    -> b sread =
+ fun ~delta ~n ~w operation skind ->
+  match skind with
+  | Sarray ->
+      fun buf offset ->
+        if n = 0 then [||]
+        else begin
+          let arr =
+            Array.make n (static_exec operation buf (Off.at offset delta))
+          in
+          for i = 1 to n - 1 do
+            Array.unsafe_set arr i
+              (static_exec operation buf Off.(at offset delta +> Len.(i * w)))
+          done;
+          arr
+        end
+  | Slist ->
+      fun buf offset ->
+        let acc = ref [] in
+        for i = n - 1 downto 0 do
+          acc :=
+            static_exec operation buf Off.(at offset delta +> Len.(i * w))
+            :: !acc
+        done;
+        !acc
 
 and static_primary_at : type a.
     win:Len.t -> rel -> a primary -> a static_operation option =
@@ -130,20 +187,66 @@ and static_primary_at : type a.
       let fn buf offset = S.unsafe_get_int8 buf (Off.at offset delta :> int) in
       narrow ~w:Len.one ~signed:false ~big:true fn
   | UInt16 endian ->
-    let get = match endian with
-      | Big_endian -> S.unsafe_get_uint16_be
-      | Little_endian -> S.unsafe_get_uint16_le
-      | Native_endian -> S.unsafe_get_uint16_ne in
-    let fn buf offset = get buf (Off.at offset delta :> int) in
-    narrow ~w:(Len.unsafe 2) ~signed:false ~big:(big_endian endian) fn
+      let get =
+        match endian with
+        | Big_endian -> S.unsafe_get_uint16_be
+        | Little_endian -> S.unsafe_get_uint16_le
+        | Native_endian -> S.unsafe_get_uint16_ne
+      in
+      let fn buf offset = get buf (Off.at offset delta :> int) in
+      narrow ~w:(Len.unsafe 2) ~signed:false ~big:(big_endian endian) fn
   | Int16 endian ->
-    let get = match endian with
-      | Big_endian -> S.unsafe_get_int16_be
-      | Little_endian -> S.unsafe_get_int16_le
-      | Native_endian -> S.unsafe_get_int16_ne in
-    let fn buf offset = get buf (Off.at offset delta :> int) in
-    narrow ~w:(Len.unsafe 2) ~signed:true ~big:(big_endian endian) fn
-  | _ -> None
+      let get =
+        match endian with
+        | Big_endian -> S.unsafe_get_int16_be
+        | Little_endian -> S.unsafe_get_int16_le
+        | Native_endian -> S.unsafe_get_int16_ne
+      in
+      let fn buf offset = get buf (Off.at offset delta :> int) in
+      narrow ~w:(Len.unsafe 2) ~signed:true ~big:(big_endian endian) fn
+  (* TODO(dinosaure): trick with bigarray and Bigarray.int{32,64}? *)
+  | Int32 Big_endian ->
+      let fn buf offset =
+        S.unsafe_get_int32_be buf (Off.at offset delta :> int)
+      in
+      Some (Ofun fn)
+  | Int32 Little_endian ->
+      let fn buf offset =
+        S.unsafe_get_int32_le buf (Off.at offset delta :> int)
+      in
+      Some (Ofun fn)
+  | Int32 Native_endian ->
+      let fn buf offset =
+        S.unsafe_get_int32_ne buf (Off.at offset delta :> int)
+      in
+      Some (Ofun fn)
+  | Int64 Big_endian ->
+      let fn buf offset =
+        S.unsafe_get_int64_be buf (Off.at offset delta :> int)
+      in
+      Some (Ofun fn)
+  | Int64 Little_endian ->
+      let fn buf offset =
+        S.unsafe_get_int64_le buf (Off.at offset delta :> int)
+      in
+      Some (Ofun fn)
+  | Int64 Native_endian ->
+      let fn buf offset =
+        S.unsafe_get_int64_ne buf (Off.at offset delta :> int)
+      in
+      Some (Ofun fn)
+  | Const v -> Some (Ofun (fun _ _ -> v))
+  | Bytes (Fixed n) ->
+      let fn buf offset =
+        S.sub_string buf ~off:(Off.at offset delta :> int) ~len:n
+      in
+      Some (Ofun fn)
+  | Bstr (Fixed n) ->
+      let fn buf offset =
+        S.sub_bstr buf ~off:(Off.at offset delta :> int) ~len:n
+      in
+      Some (Ofun fn)
+  | Var_int | Until _ | Bytes _ | Bstr _ -> None
 
 and static_record_at : type a. win:Len.t -> rel -> a record -> a sread option =
  fun ~win delta r ->
@@ -166,6 +269,11 @@ and static_record_at : type a. win:Len.t -> rel -> a record -> a sread option =
   in
   try Some (static_apply ctor (build fs)) with Not_static -> None
 
+(* NOTE(dinosaure): A plan is a "compiled" construct designed to optimise
+   decoding. The idea is to construct the functions for each field and to
+   "flatten" the record constructor using our hellish pattern-matching [apply],
+   so that we no longer incur the cost of [caml_apply] on the latter. *)
+
 let static_record_plan : type a. a record -> a sread option =
  fun r ->
   match (Bin_size.make (Record r)).layout with
@@ -175,7 +283,78 @@ let static_record_plan : type a. a record -> a sread option =
 let reader : type a. a t -> S.t -> abs -> pos -> a =
  fun root ->
   let rec go : type a. a t -> S.t -> abs -> pos -> a =
-   fun t -> match t with Primary p -> prim p | _ -> assert false
+   fun t ->
+    match t with
+    | Primary p -> prim p
+    | Record r -> go_record r
+    | _ -> assert false
+  and go_record : type a. a record -> S.t -> abs -> pos -> a =
+   fun r ->
+    let rname = if r.rname = "" then "record" else r.rname in
+    let len = (Bin_size.make (Record r)).layout in
+    match (len, static_record_plan r) with
+    | Some n, Some plan ->
+        fun buf limit pos ->
+          let offset = !pos in
+          let v =
+            try
+              Bin_error.need_bytes ~limit ~offset ~need:n;
+              plan buf offset
+            with exn -> Bin_error.reraise_in rname exn
+          in
+          (pos := Off.(offset +> n));
+          v
+    | _ -> begin
+        let (Fields (fs, ctor)) = r.rfields in
+        let delta = ref Off.zero in
+        let left = ref false in
+        (* NOTE(dinosaure): here, we’re trying to go as far as possible in terms
+           of static analysis. [left == false] as long as we can calculate the
+           size of the fields statically, except that we know (since we haven't
+           managed to calculate the total size of the [record] statically) that
+           at some point, we won't be able to determine the size of one of the
+           fields statically. But we’re giving it a go... *)
+        let rec build : type x y. (x, y) fields -> (x, y) freaders = function
+          | F0 -> R0
+          | F1 (field, rest) ->
+              let this =
+                if !left then begin
+                  let decoder = field_decoder field in
+                  fun buf _ limit pos -> decoder buf limit pos
+                end
+                else
+                  let len = (Bin_size.make field.ftype).layout in
+                  let dec = static_reader_at ~win:Len.zero !delta field.ftype in
+                  match (dec, len) with
+                  | Some operation, Some w ->
+                      (delta := Off.(!delta +> w));
+                      fun buf offset _ _ -> static_exec operation buf offset
+                  | _ ->
+                      left := true;
+                      let delta = !delta in
+                      let decoder = field_decoder field in
+                      fun buf offset limit pos ->
+                        pos := Off.at offset delta;
+                        decoder buf limit pos
+              in
+              R1 (this, build rest)
+        in
+        let readers = build fs in
+        let plan = apply ctor readers in
+        let prefix = Off.from_base !delta in
+        fun buf limit pos ->
+          let offset = !pos in
+          try
+            Bin_error.need_bytes ~limit ~offset ~need:prefix;
+            plan buf offset limit pos
+          with exn -> Bin_error.reraise_in rname exn
+      end
+  and field_decoder : type a b. (a, b) field -> S.t -> abs -> pos -> b =
+   fun field ->
+    let decoder = go field.ftype in
+    let name = field.fname in
+    fun buf limit pos ->
+      try decoder buf limit pos with exn -> Bin_error.reraise_in name exn
   and prim : type a. a primary -> S.t -> abs -> pos -> a =
    fun p ->
     match p with
@@ -185,174 +364,61 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
           Bin_error.need_bytes ~limit ~offset ~need:Len.one;
           (pos := Off.(offset +> Len.one));
           S.unsafe_get buf (offset :> int)
+    | Bytes len -> payload len (fun buf ~off ~len -> S.sub_string buf ~off ~len)
+    | Bstr len -> payload len (fun buf ~off ~len -> S.sub_bstr buf ~off ~len)
+    | Var_int -> read_varint
+    | _ -> assert false
+  and payload : type a.
+      len -> (S.t -> off:int -> len:int -> a) -> S.t -> abs -> pos -> a =
+   fun len extract ->
+    match len with
+    | Fixed n ->
+        fun buf limit pos ->
+          let offset = !pos in
+          Bin_error.need_bytes ~limit ~offset ~need:(Len.unsafe n);
+          (pos := Off.(offset +> Len.unsafe n));
+          extract buf ~off:(offset :> int) ~len:n
+    | Delim chr ->
+        fun buf limit pos ->
+          let offset = !pos in
+          let idx =
+            S.index_from buf ~off:(offset :> int) ~limit:(limit :> int) chr
+          in
+          if idx < 0 then
+            Bin_error.truncated ~offset ~need:Len.one
+              ~have:(have ~limit ~offset);
+          (pos := Off.(v idx +> Len.one));
+          extract buf ~off:(offset :> int) ~len:(Off.(v idx -- offset) :> int)
     | _ -> assert false
   in
   go root
 
-let _decoder : type a. a t -> S.t -> pos -> a =
+let decode : type a. a t -> S.t -> pos -> a =
  fun t ->
   let generic () =
     let rd = reader t in
     fun buf pos -> rd buf (Off.v (S.length buf)) pos
   in
-  match t with Record _ -> generic () | _ -> generic ()
-
-module Record_decoder = Fields_folder (struct
-  type ('a, 'b) t = S.t -> pos -> 'b -> 'a
-end)
-
-type 'a decoder = S.t -> pos -> 'a
-
-let decode_varint bstr pos =
-  let bits = ref 0 in
-  let res = ref 0 in
-  while
-    let cmd = S.get_uint8 bstr !pos in
-    incr pos;
-    res := !res lor ((cmd land 0x7f) lsl !bits);
-    bits := !bits + 7;
-    cmd land 0x80 != 0
-  do
-    ()
-  done;
-  !res
-[@@inline always]
-
-let decode_char bstr (pos : Off.abs Off.t ref) =
-  let idx = !pos in
-  Off.incr pos;
-  S.get bstr (idx :> int)
-[@@inline always]
-
-let decode_uint8 bstr (pos : Off.abs Off.t ref) =
-  let idx = !pos in
-  Off.incr pos;
-  S.get_uint8 bstr (idx :> int)
-[@@inline always]
-
-let decode_int8 bstr (pos : Off.abs Off.t ref) =
-  let idx = !pos in
-  Off.incr pos;
-  S.get_int8 bstr (idx :> int)
-[@@inline always]
-
-let decode_uint16 e bstr (pos : Off.abs Off.t ref) =
-  let idx = !pos in
-  (pos := Off.(!pos +> Len.v 2));
-  match e with
-  | Big_endian -> S.get_uint16_be bstr (idx :> int)
-  | Little_endian -> S.get_uint16_le bstr (idx :> int)
-  | Native_endian -> S.get_uint16_ne bstr (idx :> int)
-[@@inline always]
-
-let decode_int16 endian bstr (pos : Off.abs Off.t ref) =
-  let idx = !pos in
-  (pos := Off.(!pos +> Len.v 2));
-  match endian with
-  | Big_endian -> S.get_int16_be bstr (idx :> int)
-  | Little_endian -> S.get_int16_le bstr (idx :> int)
-  | Native_endian -> S.get_int16_ne bstr (idx :> int)
-[@@inline always]
-
-let decode_int32 endian bstr (pos : Off.abs Off.t ref) =
-  let idx = !pos in
-  (pos := Off.(!pos +> Len.v 4));
-  match endian with
-  | Big_endian -> S.get_int32_be bstr (idx :> int)
-  | Little_endian -> S.get_int32_le bstr (idx :> int)
-  | Native_endian -> S.get_int32_ne bstr (idx :> int)
-[@@inline always]
-
-let decode_int64 endian bstr (pos : Off.abs Off.t ref) =
-  let idx = !pos in
-  (pos := Off.(!pos +> Len.v 8));
-  match endian with
-  | Big_endian -> S.get_int64_be bstr (idx :> int)
-  | Little_endian -> S.get_int64_le bstr (idx :> int)
-  | Native_endian -> S.get_int64_ne bstr (idx :> int)
-[@@inline always]
-
-let decode_bytes len bstr (pos : Off.abs Off.t ref) =
-  let off = (!pos :> int) in
-  (pos := Off.(!pos +> Len.v len));
-  S.sub_string bstr ~off ~len
-[@@inline always]
-
-let decode_bstr len bstr (pos : Off.abs Off.t ref) =
-  if len == 0 then S.empty
-  else begin
-    let off = (!pos :> int) in
-    (pos := Off.(!pos +> Len.v len));
-    S.sub bstr ~off ~len
-  end
-[@@inline always]
-
-let decode_cstring bstr (pos : Off.abs Off.t ref) =
-  let off = (!pos :> int) in
-  while S.get_uint8 bstr (!pos :> int) != 0 do
-    Off.incr pos
-  done;
-  let len = (!pos :> int) - off in
-  let str = S.sub_string bstr ~off ~len in
-  Off.incr pos; str
-[@@inline always]
-
-let decode_until byte bstr (pos : Off.abs Off.t ref) =
-  let predicate byte' = byte != byte' in
-  let off = (!pos :> int) in
-  while predicate (S.get bstr (!pos :> int)) == false do
-    Off.incr pos
-  done;
-  let len = (!pos :> int) - off in
-  S.sub_string bstr ~off ~len
-[@@inline always]
-
-let rec decode : type a. a t -> a decoder = function
-  | Primary p -> prim p
-  | Record r -> record r
-  | Variant v -> variant v
-  | Map m -> map m
-  | Seq _ -> assert false
-
-and prim : type a. a primary -> a decoder = function
-  | Char -> decode_char
-  | UInt8 -> decode_uint8
-  | Int8 -> decode_int8
-  | UInt16 e -> decode_uint16 e
-  | Int16 e -> decode_int16 e
-  | Int32 e -> decode_int32 e
-  | Int64 e -> decode_int64 e
-  | Bytes _ -> assert false
-  | Var_int -> assert false
-  | Until p -> decode_until p
-  | Bstr _ -> assert false
-  | Const v -> fun _bstr _off -> v
-
-and map : type a b. (a, b) map -> b decoder =
- fun { x; f; _ } -> fun buf pos -> f (decode x buf pos)
-
-and record : type a. a record -> a decoder =
- fun { rfields= Fields (fs, constr); _ } ->
-  let nil _bstr _pos fn = fn in
-  let cons { ftype; _ } k =
-    let decode = decode ftype in
-    fun bstr pos constr ->
-      let x = decode bstr pos in
-      let constr = constr x in
-      k bstr pos constr
-  in
-  let fn = Record_decoder.fold { nil; cons } fs in
-  fun bstr pos -> fn bstr pos constr
-
-and variant : type a. a variant -> a decoder =
- fun v ->
-  let _decoders : a decoder array =
-    let fn = function
-      | C0 c -> fun _ _ -> c.c0
-      | C1 c ->
-          let decode_arg = decode c.ctype1 in
-          fun bstr pos -> c.c1 (decode_arg bstr pos)
-    in
-    Array.map fn v.vcases
-  in
-  fun _bstr _pos -> assert false
+  match t with
+  | Record r -> begin
+      let len = (Bin_size.make t).layout in
+      let plan = static_record_plan r in
+      match (len, plan) with
+      | Some n, Some plan ->
+          let rname = if r.rname = "" then "record" else r.rname in
+          fun buf pos ->
+            let offset = !pos in
+            let limit = Off.unsafe (S.length buf) in
+            let v =
+              try
+                if Off.(offset +> n > limit) then
+                  Bin_error.truncated ~offset ~need:n
+                    ~have:(have ~limit ~offset);
+                plan buf offset
+              with exn -> Bin_error.reraise_in rname exn
+            in
+            (pos := Off.(offset +> n));
+            v
+      | _ -> generic ()
+    end
+  | _ -> generic ()
