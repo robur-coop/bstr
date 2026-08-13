@@ -122,9 +122,8 @@ and prim : type a. a primary -> a decoder = function
   | Int16 e -> decode_int16 e
   | Int32 e -> decode_int32 e
   | Int64 e -> decode_int64 e
-  | Bytes len -> decode_bytes len
+  | Bytes _ -> assert false
   | Var_int -> assert false
-  | CString -> decode_cstring
   | Until p -> decode_until p
   | Bstr _ -> assert false
   | Const v -> fun _bstr _off -> v
