@@ -1,6 +1,6 @@
 [@@@warning "-unused-rec-flag"]
 
-include Bin_type
+open Bin_type
 
 type abs = Off.abs Off.t
 type rel = Off.rel Off.t

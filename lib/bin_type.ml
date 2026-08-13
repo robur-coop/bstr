@@ -57,6 +57,7 @@ module Len : sig
   val ( = ) : t -> t -> bool
   val ( < ) : t -> t -> bool
   val ( <= ) : t -> t -> bool
+  external unsafe : int -> t = "%identity"
 end = struct
   type t = int
 
@@ -68,6 +69,7 @@ end = struct
   let[@inline] ( = ) (a : int) (b : int) = a = b
   let[@inline] ( < ) (a : int) (b : int) = a < b
   let[@inline] ( <= ) (a : int) (b : int) = a <= b
+  external unsafe : int -> t = "%identity"
 
   let[@inline] v n =
     if n < 0 then invalid_arg "Bin_type.Len.v";
@@ -92,6 +94,7 @@ module Off : sig
   val from_base : rel t -> Len.t
   val of_len : Len.t -> 'w t
   val incr : 'w t ref -> unit
+  external unsafe : int -> _ t = "%identity"
 end = struct
   type _ t = int
   type abs
@@ -109,6 +112,7 @@ end = struct
   let[@inline] from_base (delta : int) = Len.v delta
   let[@inline] of_len (n : Len.t) = (n :> int)
   let[@inline] incr ref = incr ref
+  external unsafe : int -> _ t = "%identity"
 
   let[@inline] v n =
     if n < 0 then invalid_arg "Bin_type.Off.v";

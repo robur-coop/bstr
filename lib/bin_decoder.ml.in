@@ -1,5 +1,202 @@
 open Bin_type
 
+(* NOTE(dinosaure): here are two tips for optimising how we decode a binary
+   format:
+   - the first tip is to _flatten_ the call to the function that constructs the
+     value (known as [ctor]). A package that can take six arguments will
+     compile into a sequence of [caml_apply2] calls, which incur a cost. In the
+     case of [{R,S,W}{0,1}], we attempt (using pattern-matching) to unpack up to
+     12 arguments before finally applying our [ctor].
+   - as for [{,u}int8] and [{,u}int16_{be,le,ne}], instead of having an
+     anonymous function that decodes the value (which still involves a
+     [caml_apply]), we construct an ADT that describes how to manipulate an
+     [int64] to extract the [{,u}int8] and [{,u}int16_{be,le,ne}] values from
+     it. We then call [static_exec] (which is inlined) with this description.
+     The result is that the CPU can perform memory access fusion and extract
+     several small values from it.
+
+   These optimisations are rather verbose, but they offer significant gains for
+   fairly common packet descriptions (such as IPv4). *)
+
+type abs = Off.abs Off.t
+type rel = Off.rel Off.t
+type 'a fread = S.t -> abs -> abs -> pos -> 'a
+
+type ('a, 'b) freaders =
+  | R0 : ('a, 'a) freaders
+  | R1 : 'b fread * ('a, 'c) freaders -> ('a, 'b -> 'c) freaders
+
+type 'a sread = S.t -> abs -> 'a
+
+type _ static_operation =
+  | Iraw : { q: rel; sh: int; mk: int; sg: int } -> int static_operation
+  | Iswap : { q: rel; sh: int; mk: int; sg: int } -> int static_operation
+  | Ofun : 'a sread -> 'a static_operation
+
+type ('a, 'b) sreaders =
+  | S0 : ('a, 'a) sreaders
+  | S1 : 'b static_operation * ('a, 'c) sreaders -> ('a, 'b -> 'c) sreaders
+
+let[@inline] static_exec : type a. a static_operation -> S.t -> abs -> a =
+ fun operation buf offset ->
+  match operation with
+  | Iraw { q; sh; mk; sg } ->
+      let w = S.unsafe_get_int64_ne buf (Off.at offset q :> int) in
+      let v = Int64.to_int (Int64.shift_right_logical w sh) land mk in
+      (v lxor sg) - sg
+  | Iswap { q; sh; mk; sg } ->
+      let w = S.swap64 (S.unsafe_get_int64_ne buf (Off.at offset q :> int)) in
+      let v = Int64.to_int (Int64.shift_right_logical w sh) land mk in
+      (v lxor sg) - sg
+  | Ofun fn -> fn buf offset
+
+[@@@ocamlformat "disable"]
+
+let rec apply : type a b. b -> (a, b) freaders -> a fread
+  = fun ctor rs ->
+    match rs with
+    | R0 -> fun _ _ _ _ -> ctor
+    | R1 (r1, R0) -> fun b o l p -> ctor (r1 b o l p)
+    | R1 (r1, R1 (r2, R0)) -> fun b o l p ->
+      let v1 = r1 b o l p in
+      let v2 = r2 b o l p in
+      ctor v1 v2
+   | rs -> fun b o l p -> slow ctor rs b o l p
+and slow : type a b. b -> (a, b) freaders -> S.t -> abs -> abs -> pos -> a
+  = fun ctor rs b o l p -> match rs with
+  | R0 -> ctor
+  | R1 (r, rest) ->
+    let v = r b o l p in
+    slow (ctor v) rest b o l p
+
+let rec static_apply : type a b. b -> (a, b) sreaders -> a sread
+  = fun ctor rs ->
+    match rs with
+    | S0 -> fun _ _ -> ctor
+    | S1 (r1, S0) -> fun b o -> ctor (static_exec r1 b o)
+    | S1 (r1, (S1 (r2, S0))) -> fun b o ->
+      let v1 = static_exec r1 b o in
+      let v2 = static_exec r2 b o in
+      ctor v1 v2
+    | rs -> fun b o -> static_slow ctor rs b o
+
+and static_slow : type a b. b -> (a, b) sreaders -> S.t -> abs -> a
+  = fun ctor rs b o ->
+    match rs with
+    | S0 -> ctor
+    | S1 (r, rest) ->
+      let v = static_exec r b o in
+      static_slow (ctor v) rest b o
+[@@@ocamlformat "enable"]
+
+let narrow ~(win : Len.t) ~(delta : rel) ~(w : Len.t) ~signed ~big ~fallback =
+  let win = Len.to_int win and delta = Off.to_int delta and w = Len.to_int w in
+  if win < 8 || delta + w > win then Ofun fallback
+  else begin
+    let q = if delta <= win - 8 then delta else win - 8 in
+    let j = delta - q in
+    let q = Off.unsafe q in
+    let mk = (1 lsl (8 * w)) - 1 in
+    let sg = if signed then 1 lsl ((8 * w) - 1) else 0 in
+    let sh = if big then 8 * (8 - j - w) else 8 * j in
+    if big <> Sys.big_endian then Iswap { q; sh; mk; sg }
+    else Iraw { q; sh; mk; sg }
+  end
+
+let rec static_reader_at : type a.
+    win:Len.t -> rel -> a t -> a static_operation option =
+ fun ~win delta t ->
+  match t with Primary p -> static_primary_at ~win delta p | _ -> None
+
+and static_primary_at : type a.
+    win:Len.t -> rel -> a primary -> a static_operation option =
+ fun ~win delta p ->
+  let narrow ~w ~signed ~big fallback =
+    Some (narrow ~win ~delta ~w ~signed ~big ~fallback)
+  in
+  let big_endian = function
+    | Big_endian -> true
+    | Little_endian -> false
+    | Native_endian -> Sys.big_endian
+  in
+  match p with
+  | Char ->
+      let fn buf offset = S.unsafe_get buf (Off.at offset delta :> int) in
+      Some (Ofun fn)
+  | UInt8 ->
+      let fn buf offset = S.unsafe_get_uint8 buf (Off.at offset delta :> int) in
+      narrow ~w:Len.one ~signed:false ~big:true fn
+  | Int8 ->
+      let fn buf offset = S.unsafe_get_int8 buf (Off.at offset delta :> int) in
+      narrow ~w:Len.one ~signed:false ~big:true fn
+  | UInt16 endian ->
+    let get = match endian with
+      | Big_endian -> S.unsafe_get_uint16_be
+      | Little_endian -> S.unsafe_get_uint16_le
+      | Native_endian -> S.unsafe_get_uint16_ne in
+    let fn buf offset = get buf (Off.at offset delta :> int) in
+    narrow ~w:(Len.unsafe 2) ~signed:false ~big:(big_endian endian) fn
+  | Int16 endian ->
+    let get = match endian with
+      | Big_endian -> S.unsafe_get_int16_be
+      | Little_endian -> S.unsafe_get_int16_le
+      | Native_endian -> S.unsafe_get_int16_ne in
+    let fn buf offset = get buf (Off.at offset delta :> int) in
+    narrow ~w:(Len.unsafe 2) ~signed:true ~big:(big_endian endian) fn
+  | _ -> None
+
+and static_record_at : type a. win:Len.t -> rel -> a record -> a sread option =
+ fun ~win delta r ->
+  let exception Not_static in
+  let (Fields (fs, ctor)) = r.rfields in
+  let anchor = ref delta in
+  let rec build : type x y. (x, y) fields -> (x, y) sreaders = function
+    | F0 -> S0
+    | F1 (field, rest) ->
+        let this =
+          match static_reader_at ~win !anchor field.ftype with
+          | Some op -> op
+          | None -> raise_notrace Not_static
+        in
+        begin match (Bin_size.make field.ftype).layout with
+        | Some w -> anchor := Off.(!anchor +> w)
+        | None -> raise_notrace Not_static
+        end;
+        S1 (this, build rest)
+  in
+  try Some (static_apply ctor (build fs)) with Not_static -> None
+
+let static_record_plan : type a. a record -> a sread option =
+ fun r ->
+  match (Bin_size.make (Record r)).layout with
+  | Some n -> static_record_at ~win:n Off.zero r
+  | None -> None
+
+let reader : type a. a t -> S.t -> abs -> pos -> a =
+ fun root ->
+  let rec go : type a. a t -> S.t -> abs -> pos -> a =
+   fun t -> match t with Primary p -> prim p | _ -> assert false
+  and prim : type a. a primary -> S.t -> abs -> pos -> a =
+   fun p ->
+    match p with
+    | Char ->
+        fun buf limit pos ->
+          let offset = !pos in
+          Bin_error.need_bytes ~limit ~offset ~need:Len.one;
+          (pos := Off.(offset +> Len.one));
+          S.unsafe_get buf (offset :> int)
+    | _ -> assert false
+  in
+  go root
+
+let _decoder : type a. a t -> S.t -> pos -> a =
+ fun t ->
+  let generic () =
+    let rd = reader t in
+    fun buf pos -> rd buf (Off.v (S.length buf)) pos
+  in
+  match t with Record _ -> generic () | _ -> generic ()
+
 module Record_decoder = Fields_folder (struct
   type ('a, 'b) t = S.t -> pos -> 'b -> 'a
 end)
@@ -23,22 +220,25 @@ let decode_varint bstr pos =
 
 let decode_char bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  Off.incr pos; S.get bstr (idx :> int)
+  Off.incr pos;
+  S.get bstr (idx :> int)
 [@@inline always]
 
 let decode_uint8 bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  Off.incr pos; S.get_uint8 bstr (idx :> int)
+  Off.incr pos;
+  S.get_uint8 bstr (idx :> int)
 [@@inline always]
 
 let decode_int8 bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  Off.incr pos; S.get_int8 bstr (idx :> int)
+  Off.incr pos;
+  S.get_int8 bstr (idx :> int)
 [@@inline always]
 
 let decode_uint16 e bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  pos := Off.(!pos +> Len.v 2);
+  (pos := Off.(!pos +> Len.v 2));
   match e with
   | Big_endian -> S.get_uint16_be bstr (idx :> int)
   | Little_endian -> S.get_uint16_le bstr (idx :> int)
@@ -47,7 +247,7 @@ let decode_uint16 e bstr (pos : Off.abs Off.t ref) =
 
 let decode_int16 endian bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  pos := Off.(!pos +> Len.v 2);
+  (pos := Off.(!pos +> Len.v 2));
   match endian with
   | Big_endian -> S.get_int16_be bstr (idx :> int)
   | Little_endian -> S.get_int16_le bstr (idx :> int)
@@ -56,7 +256,7 @@ let decode_int16 endian bstr (pos : Off.abs Off.t ref) =
 
 let decode_int32 endian bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  pos := Off.(!pos +> Len.v 4);
+  (pos := Off.(!pos +> Len.v 4));
   match endian with
   | Big_endian -> S.get_int32_be bstr (idx :> int)
   | Little_endian -> S.get_int32_le bstr (idx :> int)
@@ -65,7 +265,7 @@ let decode_int32 endian bstr (pos : Off.abs Off.t ref) =
 
 let decode_int64 endian bstr (pos : Off.abs Off.t ref) =
   let idx = !pos in
-  pos := Off.(!pos +> Len.v 8);
+  (pos := Off.(!pos +> Len.v 8));
   match endian with
   | Big_endian -> S.get_int64_be bstr (idx :> int)
   | Little_endian -> S.get_int64_le bstr (idx :> int)
@@ -74,7 +274,7 @@ let decode_int64 endian bstr (pos : Off.abs Off.t ref) =
 
 let decode_bytes len bstr (pos : Off.abs Off.t ref) =
   let off = (!pos :> int) in
-  pos := Off.(!pos +> Len.v len);
+  (pos := Off.(!pos +> Len.v len));
   S.sub_string bstr ~off ~len
 [@@inline always]
 
@@ -82,7 +282,7 @@ let decode_bstr len bstr (pos : Off.abs Off.t ref) =
   if len == 0 then S.empty
   else begin
     let off = (!pos :> int) in
-    pos := Off.(!pos +> Len.v len);
+    (pos := Off.(!pos +> Len.v len));
     S.sub bstr ~off ~len
   end
 [@@inline always]
