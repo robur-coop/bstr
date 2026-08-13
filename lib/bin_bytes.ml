@@ -108,3 +108,11 @@ let unsafe_set_int64_be buf i v =
   if not Sys.big_endian then unsafe_set_int64_ne buf i (swap64 v)
   else unsafe_set_int64_ne buf i v
 [@@inline]
+
+let blit_from_string src ~src_off dst ~dst_off ~len =
+  Bytes.blit_string src src_off dst dst_off len
+[@@inline]
+
+let blit_from_bstr src ~src_off dst ~dst_off ~len =
+  Bstr.blit_to_bytes src ~src_off dst ~dst_off ~len
+[@@inline]

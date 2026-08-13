@@ -135,6 +135,25 @@ let[@inline always] w_8 set =
 (* Thanks, god! *)
 [@@@ocamlformat "enable"]
 
+let write_varint value buf limit pos =
+  if value < 0 then
+    Bin_error.out_of_range ~offset:!pos ~kind:"varint"
+      ~value:(string_of_int value);
+  let num = ref (value lsr 7) in
+  let cmd = ref (value land 0x7f) in
+  cmd := if !num != 0 then !cmd lor 0x80 else !cmd;
+  Bin_error.need_bytes ~limit ~offset:!pos ~need:Len.one;
+  S.unsafe_set_uint8 buf (!pos :> int) !cmd;
+  (pos := Off.(!pos +> Len.one));
+  while !num != 0 do
+    cmd := !num land 0x7f;
+    num := !num lsr 7;
+    cmd := if !num != 0 then !cmd lor 0x80 else !cmd;
+    Bin_error.need_bytes ~limit ~offset:!pos ~need:Len.one;
+    S.unsafe_set_uint8 buf (!pos :> int) !cmd;
+    pos := Off.(!pos +> Len.one)
+  done
+
 type 'a fwrite = 'a -> S.t -> int -> int -> pos -> unit
 type 'a swrite = 'a -> S.t -> abs -> unit
 
@@ -171,7 +190,7 @@ and static_primary_writer_for : type a b.
   | Int64 Big_endian -> Some (w_i64_be delta get)
   | Int64 Little_endian -> Some (w_i64_le delta get)
   | Int64 Native_endian -> Some (w_i64_ne delta get)
-  | Var_int | Bytes _ | CString | Until _ | Bstr _ -> None
+  | Var_int | Bytes _ | Until _ | Bstr _ -> None
 
 (* NOTE(dinosaure): here, we compile an array which contains encoders for each
    field of the record. Compilation is only possible if the size of the record's
@@ -237,7 +256,7 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
     with
     | Some n, Some cells ->
         let k = Array.length cells in
-        let fn v buf limit pos =
+        fun v buf limit pos ->
           let offset = !pos in
           begin try
             Bin_error.need_bytes ~limit ~offset ~need:n;
@@ -247,9 +266,7 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
           with exn -> Bin_error.reraise_in rname exn
           end;
           pos := Off.(offset +> n)
-        in
-        fn
-    | _ -> (
+    | _ -> begin
         let delta = ref Off.zero in
         let left = ref false in
         let cells =
@@ -285,7 +302,8 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
             for i = 0 to n - 1 do
               (Array.unsafe_get cells i) v buf offset limit pos
             done
-          with exn -> Bin_error.reraise_in rname exn)
+          with exn -> Bin_error.reraise_in rname exn
+      end
   and field_encoder : type a b. (a, b) field -> b -> S.t -> abs -> pos -> unit =
    fun field ->
     let wr = go field.ftype in
@@ -357,11 +375,77 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
     | Int64 Big_endian -> w_8 S.unsafe_set_int64_be
     | Int64 Little_endian -> w_8 S.unsafe_set_int64_le
     | Int64 Native_endian -> w_8 S.unsafe_set_int64_ne
-    | Var_int -> assert false
-    | Until _ -> assert false
-    | Bytes _ -> assert false
-    | Bstr _ -> assert false
-    | CString -> assert false
+    | Var_int -> write_varint
+    | Until _ ->
+        fun v buf limit pos ->
+          let offset = !pos in
+          let n = String.length v in
+          Bin_error.need_bytes ~limit ~offset ~need:(Len.v n);
+          S.blit_from_string v ~src_off:0 buf ~dst_off:(offset :> int) ~len:n;
+          pos := Off.(offset +> Len.v n)
+    | Bytes len ->
+        let blit v buf ~off ~len =
+          S.blit_from_string v ~src_off:0 buf ~dst_off:off ~len
+        in
+        let contains v chr = String.contains v chr in
+        payload len String.length blit contains
+    | Bstr len ->
+        let blit v buf ~off ~len =
+          S.blit_from_bstr v ~src_off:0 buf ~dst_off:off ~len
+        in
+        let contains v chr = Bstr.contains v chr in
+        payload len Bstr.length blit contains
+  and payload : type a.
+         len
+      -> (a -> int)
+      -> (a -> S.t -> off:int -> len:int -> unit)
+      -> (a -> char -> bool)
+      -> a
+      -> S.t
+      -> abs
+      -> pos
+      -> unit =
+   fun len length blit contains ->
+    match len with
+    | Fixed n ->
+        fun v buf limit pos ->
+          let got = length v in
+          if got <> n then
+            Bin_error.length_mismatch ~offset:!pos ~expected:n ~got;
+          let offset = !pos in
+          Bin_error.need_bytes ~limit ~offset ~need:(Len.v n);
+          blit v buf ~off:(offset :> int) ~len:n;
+          pos := Off.(offset +> Len.v n)
+        (* TODO(dinosaure): [Fixed of Len.t] instead of [Fixed of int] *)
+    | Prefix t ->
+        let wr = go t in
+        fun v buf limit pos ->
+          let n = length v in
+          wr n buf limit pos;
+          let offset = !pos in
+          Bin_error.need_bytes ~limit ~offset ~need:(Len.v n);
+          blit v buf ~off:(offset :> int) ~len:n;
+          pos := Off.(offset +> Len.v n)
+    | Rest ->
+        fun v buf limit pos ->
+          let n = length v in
+          let offset = !pos in
+          Bin_error.need_bytes ~limit ~offset ~need:(Len.v n);
+          blit v buf ~off:(offset :> int) ~len:n;
+          pos := Off.(offset +> Len.v n)
+    | Delim chr ->
+        fun v buf limit pos ->
+          if contains v chr then
+            Bin_error.msgf
+              "Bin.bytes: the payload contains its own delimited %C, encoding \
+               it would not round-trip"
+              chr;
+          let n = length v in
+          let offset = !pos in
+          Bin_error.need_bytes ~limit ~offset ~need:Len.(v n + one);
+          blit v buf ~off:(offset :> int) ~len:n;
+          S.unsafe_set buf (Off.(offset +> Len.v n) :> int) chr;
+          pos := Off.(offset +> Len.(v n + one))
   in
   go root
 
@@ -378,7 +462,7 @@ let encode : type a. a t -> a -> S.t -> pos -> unit =
       with
       | Some n, Some cells ->
           let k = Array.length cells in
-          let fn v buf pos =
+          fun v buf pos ->
             let offset = !pos in
             let limit = Off.v (S.length buf) in
             if Off.(offset +> n > limit) then
@@ -387,97 +471,6 @@ let encode : type a. a t -> a -> S.t -> pos -> unit =
               (Array.unsafe_get cells i) v buf offset
             done;
             pos := Off.(offset +> n)
-          in
-          fn
       | _ -> generic ()
       end
   | _ -> generic ()
-
-(*
-type 'a encoder = 'a -> S.t -> pos -> unit
-
-
-let encode_bytes len src buf off =
-  let pos = !off in
-  off := !off + len;
-  S.blit_string src 0 buf pos len
-
-let encode_bstr len src buf off =
-  let dst_off = !off in
-  off := !off + len;
-  Bstr.blit_to_bytes src ~src_off:0 buf ~dst_off ~len
-
-let encode_varint value buf off =
-  let num = ref (value lsr 7) in
-  let cmd = ref (value land 0x7f) in
-  cmd := if !num != 0 then !cmd lor 0x80 else !cmd;
-  S.set_uint8 buf !off !cmd;
-  incr off;
-  while !num != 0 do
-    cmd := !num land 0x7f;
-    num := !num lsr 7;
-    cmd := if !num != 0 then !cmd lor 0x80 else !cmd;
-    S.set_uint8 buf !off !cmd;
-    incr off
-  done
-
-let encode_cstring src buf off =
-  let pos = !off in
-  let len = String.length src in
-  off := !off + len;
-  S.blit_string src 0 buf pos len;
-  S.set_uint8 buf !off 0;
-  incr off
-
-let encode_until src buf off =
-  let pos = !off in
-  let len = String.length src in
-  off := !off + len;
-  S.blit_string src 0 buf pos len
-
-let rec encode : type a. a t -> a encoder = function
-  | Primary p -> prim p
-  | Map m -> map m
-  | Record r -> record r
-  | Variant v -> variant v
-  | Seq s -> seq s
-
-and seq : type a b. (a, b) seq -> b encoder = fun _ -> assert false
-
-and prim : type a. a primary -> a encoder = function
-  | Char -> encode_char
-  | UInt8 -> encode_uint8
-  | Int8 -> encode_int8
-  | UInt16 e -> encode_uint16 e
-  | Int16 e -> encode_int16 e
-  | Int32 e -> encode_int32 e
-  | Int64 e -> encode_int64 e
-  | Bytes len -> encode_bytes len
-  | Var_int -> encode_varint
-  | CString -> encode_cstring
-  | Until _ -> encode_until
-  | Bstr _ -> assert false
-  | Const _ -> fun _v _bstr _off -> ()
-
-and record : type a. a record -> a encoder =
- fun r ->
-  let fields_encoders : (a -> S.t -> pos -> unit) list =
-    let fn (Field f) = fun v buf off -> (encode f.ftype) (f.fget v) buf off in
-    List.map fn (fields r)
-  in
-  fun v buf off -> List.iter (fun fn -> fn v buf off) fields_encoders
-
-and variant : type a. a variant -> a encoder =
-  let c0 { ctag0; _ } = encode_varint ctag0 in
-  let c1 c =
-    let arg = encode c.ctype1 in
-    fun v buf off ->
-      encode_varint c.ctag1 buf off;
-      arg v buf off
-  in
-  fun v -> fold_variant { c0; c1 } v
-
-and map : type a b. (a, b) map -> b encoder =
- fun { x; g; _ } -> fun u buf off -> encode x (g u) buf off
-
-*)

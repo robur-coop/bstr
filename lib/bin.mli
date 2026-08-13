@@ -146,9 +146,8 @@ val until : char -> string t
 val const : 'a -> 'a t
 (** [const v] is [v] without a serialization mechanism. *)
 
-val seq : len:int -> 'a t -> 'a array t
-(** [seq ~len v] is a representation of fixed-length arrays of values of type
-    [v]. *)
+val seq : len -> 'a t -> 'a array t
+val list : len -> 'a t -> 'a list t
 
 val map : 'b t -> ('b -> 'a) -> ('a -> 'b) -> 'a t
 (** This combinator allows defining a representative of one type in terms of

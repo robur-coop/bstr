@@ -61,6 +61,13 @@ let bstr len = Primary (Bstr len)
 let cstring = Primary (Bytes (Delim '\000'))
 let until byte = Primary (Until byte)
 
+let reject fn = function
+  | Delim _ -> invalid_argf "%s: a delimited cannot bound s sequence" fn
+  | slen -> slen
+
+let seq slen selt = Seq { slen= reject "Bin.seq" slen; selt; skind= Sarray }
+let list slen selt = Seq { slen= reject "Bin.list" slen; selt; skind= Slist }
+
 (* record *)
 
 type ('a, 'b, 'c) open_record = ('a, 'c) fields -> string * 'b * ('a, 'b) fields
@@ -154,4 +161,3 @@ let ( |~ ) = app
 (* map *)
 
 let map x f g = Map { x; f; g; mwit= Witness.make () }
-let seq ~len:_ _lval = assert false
