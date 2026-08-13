@@ -30,14 +30,10 @@ let max (a : int) b = if a >= b then a else b [@@inline]
 
 open Slice
 
-let make ?(off= 0) ?len buf =
-  let len = match len with
-    | Some len -> len
-    | None -> S.length buf - off in
-  if len < 0
-  || off < 0
-  || off > S.length buf - len
-  then invalid_arg "Slice.make";
+let make ?(off = 0) ?len buf =
+  let len = match len with Some len -> len | None -> S.length buf - off in
+  if len < 0 || off < 0 || off > S.length buf - len then
+    invalid_arg "Slice.make";
   Slice.unsafe_make ~off ~len buf
 
 let empty = unsafe_make ~off:0 ~len:0 S.empty
@@ -75,32 +71,26 @@ let set_int64_be { off; buf; _ } idx v = S.set_int64_be buf (off + idx) v
 
 let blit a b =
   let len = Int.min a.len b.len in
-  S.blit a.buf ~src_off:a.off b.buf ~dst_off:b.off ~len:len
+  S.blit a.buf ~src_off:a.off b.buf ~dst_off:b.off ~len
 
 let blit_from_bytes src ~src_off { Slice.buf; off; _ } ?dst_off len =
-  let dst_off = match dst_off with
-    | Some dst_off -> dst_off + off
-    | None -> off in
-  if len < 0
-  || dst_off < 0
-  || dst_off > S.length buf - len
-  then invalid_arg "Slice.blit_from_bytes";
+  let dst_off =
+    match dst_off with Some dst_off -> dst_off + off | None -> off
+  in
+  if len < 0 || dst_off < 0 || dst_off > S.length buf - len then
+    invalid_arg "Slice.blit_from_bytes";
   S.blit_from_bytes src ~src_off buf ~dst_off ~len
 
 let blit_to_bytes { Slice.buf; off; _ } ?src_off dst ~dst_off ~len =
-  let src_off = match src_off with
-    | Some src_off -> src_off + off
-    | None -> off in
-  if len < 0
-  || src_off < 0
-  || src_off > S.length buf - len
-  then invalid_arg "Slice.blit_to_bytes";
+  let src_off =
+    match src_off with Some src_off -> src_off + off | None -> off
+  in
+  if len < 0 || src_off < 0 || src_off > S.length buf - len then
+    invalid_arg "Slice.blit_to_bytes";
   S.blit_to_bytes buf ~src_off dst ~dst_off ~len
 
-let fill { off; len; buf; } ?off:(off'= 0) ?len:len' chr =
-  let len' = match len' with
-    | Some len' -> len'
-    | None -> len - off' in
+let fill { off; len; buf } ?off:(off' = 0) ?len:len' chr =
+  let len' = match len' with Some len' -> len' | None -> len - off' in
   S.fill buf ~off:(off + off') ~len:len' chr
 
 let sub t ~off ~len = Slice.sub t ~off ~len
@@ -121,28 +111,27 @@ let of_string str =
   let off = 0 and len = String.length str in
   Slice.unsafe_make ~off ~len (S.of_string str)
 
-let string ?(off= 0) ?len str =
-  let len = match len with 
-    | None -> String.length str - off 
-    | Some len -> len in
+let string ?(off = 0) ?len str =
+  let len =
+    match len with None -> String.length str - off | Some len -> len
+  in
   Slice.unsafe_make ~off:0 ~len (S.string ~off ~len str)
 
 let overlap ({ buf= buf0; _ } as a) ({ buf= buf1; _ } as b) =
   match S.overlap buf0 buf1 with
   | None -> None
   | Some (_, 0, 0) ->
-      let len =
-        max 0 (min (a.off + a.len) (b.off + b.len)) - max a.off b.off in
-      if a.off >= b.off && a.off < b.off + b.len
-      then
-        let offset = a.off - b.off in Some (len, 0, offset)
-      else if b.off >= a.off && b.off < a.off + a.len
-      then
-        let offset = b.off + a.off in Some (len, offset, 0)
+      let len = max 0 (min (a.off + a.len) (b.off + b.len)) - max a.off b.off in
+      if a.off >= b.off && a.off < b.off + b.len then
+        let offset = a.off - b.off in
+        Some (len, 0, offset)
+      else if b.off >= a.off && b.off < a.off + a.len then
+        let offset = b.off + a.off in
+        Some (len, offset, 0)
       else None
   | Some _ ->
       let a = S.sub buf0 ~off:a.off ~len:a.len
       and b = S.sub buf1 ~off:b.off ~len:b.len in
       S.overlap a b
-      (* TODO(dinosaure): this case appears only for bigstrings, but we could
+(* TODO(dinosaure): this case appears only for bigstrings, but we could
          optimize it and avoid [S.sub]. *)
