@@ -72,7 +72,105 @@ let rec apply : type a b. b -> (a, b) freaders -> a fread
       let v1 = r1 b o l p in
       let v2 = r2 b o l p in
       ctor v1 v2
-   | rs -> fun b o l p -> slow ctor rs b o l p
+    | R1 (r1, R1 (r2, R1 (r3, R0))) -> fun b o l p ->
+      let v1 = r1 b o l p in
+      let v2 = r2 b o l p in
+      let v3 = r3 b o l p in
+      ctor v1 v2 v3
+    | R1 (r1, R1 (r2, R1 (r3, R1 (r4, R0)))) -> fun b o l p ->
+      let v1 = r1 b o l p in
+      let v2 = r2 b o l p in
+      let v3 = r3 b o l p in
+      let v4 = r4 b o l p in
+      ctor v1 v2 v3 v4
+    | R1 (r1, R1 (r2, R1 (r3, R1 (r4, R1 (r5, R0))))) -> fun b o l p ->
+      let v1 = r1 b o l p in
+      let v2 = r2 b o l p in
+      let v3 = r3 b o l p in
+      let v4 = r4 b o l p in
+      let v5 = r5 b o l p in
+      ctor v1 v2 v3 v4 v5
+    | R1 (r1, R1 (r2, R1 (r3, R1 (r4, R1 (r5, R1 (r6, R0)))))) -> fun b o l p ->
+      let v1 = r1 b o l p in
+      let v2 = r2 b o l p in
+      let v3 = r3 b o l p in
+      let v4 = r4 b o l p in
+      let v5 = r5 b o l p in
+      let v6 = r6 b o l p in
+      ctor v1 v2 v3 v4 v5 v6
+    | R1 (r1, R1 (r2, R1 (r3, R1 (r4, R1 (r5, R1 (r6, R1 (r7, R0))))))) -> fun b o l p ->
+      let v1 = r1 b o l p in
+      let v2 = r2 b o l p in
+      let v3 = r3 b o l p in
+      let v4 = r4 b o l p in
+      let v5 = r5 b o l p in
+      let v6 = r6 b o l p in
+      let v7 = r7 b o l p in
+      ctor v1 v2 v3 v4 v5 v6 v7
+    | R1 (r1, R1 (r2, R1 (r3, R1 (r4, R1 (r5, R1 (r6, R1 (r7, R1 (r8, R0)))))))) -> fun b o l p ->
+      let v1 = r1 b o l p in
+      let v2 = r2 b o l p in
+      let v3 = r3 b o l p in
+      let v4 = r4 b o l p in
+      let v5 = r5 b o l p in
+      let v6 = r6 b o l p in
+      let v7 = r7 b o l p in
+      let v8 = r8 b o l p in
+      ctor v1 v2 v3 v4 v5 v6 v7 v8
+    | R1 (r1, R1 (r2, R1 (r3, R1 (r4, R1 (r5, R1 (r6, R1 (r7, R1 (r8, R1 (r9, R0))))))))) -> fun b o l p ->
+      let v1 = r1 b o l p in
+      let v2 = r2 b o l p in
+      let v3 = r3 b o l p in
+      let v4 = r4 b o l p in
+      let v5 = r5 b o l p in
+      let v6 = r6 b o l p in
+      let v7 = r7 b o l p in
+      let v8 = r8 b o l p in
+      let v9 = r9 b o l p in
+      ctor v1 v2 v3 v4 v5 v6 v7 v8 v9
+    | R1 (r1, R1 (r2, R1 (r3, R1 (r4, R1 (r5, R1 (r6, R1 (r7, R1 (r8, R1 (r9, R1 (r10, R0)))))))))) ->
+      fun b o l p ->
+        let v1 = r1 b o l p in
+        let v2 = r2 b o l p in
+        let v3 = r3 b o l p in
+        let v4 = r4 b o l p in
+        let v5 = r5 b o l p in
+        let v6 = r6 b o l p in
+        let v7 = r7 b o l p in
+        let v8 = r8 b o l p in
+        let v9 = r9 b o l p in
+        let v10 = r10 b o l p in
+        ctor v1 v2 v3 v4 v5 v6 v7 v8 v9 v10
+    | R1 (r1, R1 (r2, R1 (r3, R1 (r4, R1 (r5, R1 (r6, R1 (r7, R1 (r8, R1 (r9, R1 (r10, R1 (r11, R0))))))))))) ->
+      fun b o l p ->
+        let v1 = r1 b o l p in
+        let v2 = r2 b o l p in
+        let v3 = r3 b o l p in
+        let v4 = r4 b o l p in
+        let v5 = r5 b o l p in
+        let v6 = r6 b o l p in
+        let v7 = r7 b o l p in
+        let v8 = r8 b o l p in
+        let v9 = r9 b o l p in
+        let v10 = r10 b o l p in
+        let v11 = r11 b o l p in
+        ctor v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11
+    | R1 (r1, R1 (r2, R1 (r3, R1 (r4, R1 (r5, R1 (r6, R1 (r7, R1 (r8, R1 (r9, R1 (r10, R1 (r11, R1 (r12, R0)))))))))))) ->
+      fun b o l p ->
+        let v1 = r1 b o l p in
+        let v2 = r2 b o l p in
+        let v3 = r3 b o l p in
+        let v4 = r4 b o l p in
+        let v5 = r5 b o l p in
+        let v6 = r6 b o l p in
+        let v7 = r7 b o l p in
+        let v8 = r8 b o l p in
+        let v9 = r9 b o l p in
+        let v10 = r10 b o l p in
+        let v11 = r11 b o l p in
+        let v12 = r12 b o l p in
+        ctor v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12
+    | rs -> fun b o l p -> slow ctor rs b o l p
 and slow : type a b. b -> (a, b) freaders -> S.t -> abs -> abs -> pos -> a
   = fun ctor rs b o l p -> match rs with
   | R0 -> ctor
@@ -89,6 +187,104 @@ let rec static_apply : type a b. b -> (a, b) sreaders -> a sread
       let v1 = static_exec r1 b o in
       let v2 = static_exec r2 b o in
       ctor v1 v2
+    | S1 (r1, S1 (r2, S1 (r3, S0))) -> fun b o ->
+      let v1 = static_exec r1 b o in
+      let v2 = static_exec r2 b o in
+      let v3 = static_exec r3 b o in
+      ctor v1 v2 v3
+    | S1 (r1, S1 (r2, S1 (r3, S1 (r4, S0)))) -> fun b o ->
+      let v1 = static_exec r1 b o in
+      let v2 = static_exec r2 b o in
+      let v3 = static_exec r3 b o in
+      let v4 = static_exec r4 b o in
+      ctor v1 v2 v3 v4
+    | S1 (r1, S1 (r2, S1 (r3, S1 (r4, S1 (r5, S0))))) -> fun b o ->
+      let v1 = static_exec r1 b o in
+      let v2 = static_exec r2 b o in
+      let v3 = static_exec r3 b o in
+      let v4 = static_exec r4 b o in
+      let v5 = static_exec r5 b o in
+      ctor v1 v2 v3 v4 v5
+    | S1 (r1, S1 (r2, S1 (r3, S1 (r4, S1 (r5, S1 (r6, S0)))))) -> fun b o ->
+      let v1 = static_exec r1 b o in
+      let v2 = static_exec r2 b o in
+      let v3 = static_exec r3 b o in
+      let v4 = static_exec r4 b o in
+      let v5 = static_exec r5 b o in
+      let v6 = static_exec r6 b o in
+      ctor v1 v2 v3 v4 v5 v6
+    | S1 (r1, S1 (r2, S1 (r3, S1 (r4, S1 (r5, S1 (r6, S1 (r7, S0))))))) -> fun b o ->
+      let v1 = static_exec r1 b o in
+      let v2 = static_exec r2 b o in
+      let v3 = static_exec r3 b o in
+      let v4 = static_exec r4 b o in
+      let v5 = static_exec r5 b o in
+      let v6 = static_exec r6 b o in
+      let v7 = static_exec r7 b o in
+      ctor v1 v2 v3 v4 v5 v6 v7
+    | S1 (r1, S1 (r2, S1 (r3, S1 (r4, S1 (r5, S1 (r6, S1 (r7, S1 (r8, S0)))))))) -> fun b o ->
+      let v1 = static_exec r1 b o in
+      let v2 = static_exec r2 b o in
+      let v3 = static_exec r3 b o in
+      let v4 = static_exec r4 b o in
+      let v5 = static_exec r5 b o in
+      let v6 = static_exec r6 b o in
+      let v7 = static_exec r7 b o in
+      let v8 = static_exec r8 b o in
+      ctor v1 v2 v3 v4 v5 v6 v7 v8
+    | S1 (r1, S1 (r2, S1 (r3, S1 (r4, S1 (r5, S1 (r6, S1 (r7, S1 (r8, S1 (r9, S0))))))))) -> fun b o ->
+      let v1 = static_exec r1 b o in
+      let v2 = static_exec r2 b o in
+      let v3 = static_exec r3 b o in
+      let v4 = static_exec r4 b o in
+      let v5 = static_exec r5 b o in
+      let v6 = static_exec r6 b o in
+      let v7 = static_exec r7 b o in
+      let v8 = static_exec r8 b o in
+      let v9 = static_exec r9 b o in
+      ctor v1 v2 v3 v4 v5 v6 v7 v8 v9
+    | S1 (r1, S1 (r2, S1 (r3, S1 (r4, S1 (r5, S1 (r6, S1 (r7, S1 (r8, S1 (r9, S1 (r10, S0)))))))))) ->
+      fun b o ->
+        let v1 = static_exec r1 b o in
+        let v2 = static_exec r2 b o in
+        let v3 = static_exec r3 b o in
+        let v4 = static_exec r4 b o in
+        let v5 = static_exec r5 b o in
+        let v6 = static_exec r6 b o in
+        let v7 = static_exec r7 b o in
+        let v8 = static_exec r8 b o in
+        let v9 = static_exec r9 b o in
+        let v10 = static_exec r10 b o in
+        ctor v1 v2 v3 v4 v5 v6 v7 v8 v9 v10
+    | S1 (r1, S1 (r2, S1 (r3, S1 (r4, S1 (r5, S1 (r6, S1 (r7, S1 (r8, S1 (r9, S1 (r10, S1 (r11, S0))))))))))) ->
+      fun b o ->
+        let v1 = static_exec r1 b o in
+        let v2 = static_exec r2 b o in
+        let v3 = static_exec r3 b o in
+        let v4 = static_exec r4 b o in
+        let v5 = static_exec r5 b o in
+        let v6 = static_exec r6 b o in
+        let v7 = static_exec r7 b o in
+        let v8 = static_exec r8 b o in
+        let v9 = static_exec r9 b o in
+        let v10 = static_exec r10 b o in
+        let v11 = static_exec r11 b o in
+        ctor v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11
+    | S1 (r1, S1 (r2, S1 (r3, S1 (r4, S1 (r5, S1 (r6, S1 (r7, S1 (r8, S1 (r9, S1 (r10, S1 (r11, S1 (r12, S0)))))))))))) ->
+      fun b o ->
+        let v1 = static_exec r1 b o in
+        let v2 = static_exec r2 b o in
+        let v3 = static_exec r3 b o in
+        let v4 = static_exec r4 b o in
+        let v5 = static_exec r5 b o in
+        let v6 = static_exec r6 b o in
+        let v7 = static_exec r7 b o in
+        let v8 = static_exec r8 b o in
+        let v9 = static_exec r9 b o in
+        let v10 = static_exec r10 b o in
+        let v11 = static_exec r11 b o in
+        let v12 = static_exec r12 b o in
+        ctor v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12
     | rs -> fun b o -> static_slow ctor rs b o
 
 and static_slow : type a b. b -> (a, b) sreaders -> S.t -> abs -> a
