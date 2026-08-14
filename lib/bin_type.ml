@@ -254,3 +254,18 @@ let fold_variant : type a r. (a, r) Case_folder.t -> a variant -> a -> r =
             fn v
         | _ -> assert false
         end
+
+module Case = struct
+  let tag = function C0 { ctag0; _ } -> ctag0 | C1 { ctag1; _ } -> ctag1
+
+  let name = function
+    | C0 { cname0; _ } -> cname0
+    | C1 { cname1; _ } -> cname1
+
+  let expected vcases = Array.to_list (Array.map tag vcases)
+
+  let dense vcases =
+    let n = Array.length vcases in
+    let rec go i = i >= n || (tag vcases.(i) = i && go (i+1)) in
+    go 0
+end

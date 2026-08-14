@@ -132,8 +132,6 @@ let app v c cs =
   let c, f = c (List.length cs) in
   (name, fc f, c :: cs)
 
-let tag_of_case = function C0 { ctag0; _ } -> ctag0 | C1 { ctag1; _ } -> ctag1
-
 let name_of_case = function
   | C0 { cname0; _ } -> cname0
   | C1 { cname1; _ } -> cname1
@@ -143,9 +141,9 @@ let sealv ?tag:(vtag = varint) v =
   let vcases = Array.of_list (List.rev vcases) in
   let seen = Hashtbl.create 16 in
   let fn c =
-    let t = tag_of_case c in
+    let t = Case.tag c in
     if t < 0 then
-      invalid_argf "Bin.sealv: case %s has a negative tag (%d)" (name_of_case c)
+      invalid_argf "Bin.sealv: case %s has a negative tag (%d)" (Case.name c)
         t;
     match Hashtbl.find_opt seen t with
     | None -> Hashtbl.add seen t (name_of_case c)

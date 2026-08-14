@@ -287,6 +287,7 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
     match t with
     | Primary p -> prim p
     | Record r -> go_record r
+    | Variant v -> go_variant v
     | _ -> assert false
   and go_record : type a. a record -> S.t -> abs -> pos -> a =
    fun r ->
@@ -308,7 +309,7 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
         let (Fields (fs, ctor)) = r.rfields in
         let delta = ref Off.zero in
         let left = ref false in
-        (* NOTE(dinosaure): here, we’re trying to go as far as possible in terms
+        (* NOTE(dinosaure): here, we're trying to go as far as possible in terms
            of static analysis. [left == false] as long as we can calculate the
            size of the fields statically, except that we know (since we haven't
            managed to calculate the total size of the [record] statically) that
@@ -355,6 +356,55 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
     let name = field.fname in
     fun buf limit pos ->
       try decoder buf limit pos with exn -> Bin_error.reraise_in name exn
+  and go_variant : type a. a variant -> S.t -> abs -> pos -> a =
+   fun v ->
+    let tag = go v.vtag in
+    let decoders =
+      let fn = function
+        | C0 c -> fun _ _ _ -> c.c0
+        | C1 c ->
+            let dec = go c.ctype1 in
+            let name = c.cname1 in
+            fun buf limit pos ->
+              c.c1
+                (try dec buf limit pos
+                 with exn -> Bin_error.reraise_in name exn)
+      in
+      Array.map fn v.vcases
+    in
+    let n = Array.length v.vcases in
+    let vname = if v.vname = "" then "variant" else v.vname in
+    let expected = Case.expected v.vcases in
+    if Case.dense v.vcases then (fun buf limit pos ->
+      let offset = !pos in
+      let tag = tag buf limit pos in
+      if tag < 0 || tag >= n then
+        Bin_error.unexpected_tag ~offset ~tag ~expected;
+      try (Array.unsafe_get decoders tag) buf limit pos
+      with exn -> Bin_error.reraise_in vname exn)
+    else
+      let fn i c = (Case.tag c, i) in
+      let table = Array.mapi fn v.vcases in
+      Array.sort (fun (a, _) (b, _) -> compare (a : int) b) table;
+      let find tag =
+        (* binary search *)
+        let lo = ref 0 and hi = ref (n - 1) and res = ref (-1) in
+        while !res < 0 && !lo <= !hi do
+          let mid = (!lo + !hi) / 2 in
+          let t, i = Array.unsafe_get table mid in
+          if t = tag then res := i
+          else if t < tag then lo := mid + 1
+          else hi := mid - 1
+        done;
+        !res
+      in
+      fun buf limit pos ->
+        let offset = !pos in
+        let tag = tag buf limit pos in
+        let i = find tag in
+        if i < 0 then Bin_error.unexpected_tag ~offset ~tag ~expected;
+        try (Array.unsafe_get decoders i) buf limit pos
+        with exn -> Bin_error.reraise_in vname exn
   and prim : type a. a primary -> S.t -> abs -> pos -> a =
    fun p ->
     match p with
