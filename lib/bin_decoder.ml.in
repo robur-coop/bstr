@@ -123,6 +123,17 @@ let rec static_reader_at : type a.
  fun ~win delta t ->
   match t with
   | Primary p -> static_primary_at ~win delta p
+  | Map { x; f; _ } ->
+      begin match static_reader_at ~win delta x with
+      | Some operation ->
+          Some (Ofun (fun buf offset -> f (static_exec operation buf offset)))
+      | None -> None
+      end
+  | Record r ->
+      begin match static_record_at ~win delta r with
+      | Some rd -> Some (Ofun rd)
+      | None -> None
+      end
   | Seq { slen= Fixed n; selt; skind } -> begin
       let len = (Bin_size.make selt).layout in
       let operation = static_reader_at ~win:Len.zero Off.zero selt in
@@ -288,6 +299,7 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
     | Primary p -> prim p
     | Record r -> go_record r
     | Variant v -> go_variant v
+    | Seq s -> go_seq s
     | _ -> assert false
   and go_record : type a. a record -> S.t -> abs -> pos -> a =
    fun r ->
@@ -405,6 +417,60 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
         if i < 0 then Bin_error.unexpected_tag ~offset ~tag ~expected;
         try (Array.unsafe_get decoders i) buf limit pos
         with exn -> Bin_error.reraise_in vname exn
+  and go_seq : type a b. (a, b) seq -> S.t -> abs -> pos -> b =
+   fun { slen; selt; skind } ->
+    let elt = go selt in
+    let collect : (unit -> a) -> int -> b =
+      match skind with
+      | Sarray ->
+          fun next n ->
+            if n = 0 then [||]
+            else begin
+              let arr = Array.make n (next ()) in
+              for i = 1 to n - 1 do
+                Array.unsafe_set arr i (next ())
+              done;
+              arr
+            end
+      | Slist ->
+          fun next n ->
+            let rec go acc i =
+              if i = 0 then List.rev acc else go (next () :: acc) (i - 1)
+            in
+            go [] n
+    in
+    let of_rev_list : a list -> int -> b =
+      match skind with
+      | Slist -> fun acc _ -> List.rev acc
+      | Sarray ->
+          fun acc n ->
+            if n = 0 then [||]
+            else begin
+              let arr = Array.make n (List.hd acc) in
+              let i = ref (n - 1) in
+              let fn x = Array.unsafe_set arr !i x; decr i in
+              List.iter fn acc; arr
+            end
+    in
+    match slen with
+    | Fixed n -> fun buf limit pos -> collect (fun () -> elt buf limit pos) n
+    | Prefix t ->
+        let read = go t in
+        fun buf limit pos ->
+          let n = read buf limit pos in
+          if n < 0 then
+            Bin_error.length_mismatch ~offset:!pos ~expected:0 ~got:n;
+          collect (fun () -> elt buf limit pos) n
+    | Rest ->
+        fun buf limit pos ->
+          let acc = ref [] and n = ref 0 in
+          while Off.(!pos < limit) do
+            acc := elt buf limit pos :: !acc;
+            incr n
+          done;
+          of_rev_list !acc !n
+    | Delim _ ->
+        assert false (* NOTE(dinosaure): see [Bin.seq] and [Bin.list] *)
   and prim : type a. a primary -> S.t -> abs -> pos -> a =
    fun p ->
     match p with
