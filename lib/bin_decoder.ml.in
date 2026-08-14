@@ -52,6 +52,17 @@ let[@inline] static_exec : type a. a static_operation -> S.t -> abs -> a =
 
 [@@@ocamlformat "disable"]
 
+let[@inline] readn (n : Len.t) get buf limit pos =
+  let offset = !pos in
+  Bin_error.need_bytes ~limit ~offset ~need:n;
+  pos := Off.(offset +> n);
+  get buf (offset :> int)
+
+let[@inline] r_1 get buf limit pos = readn Len.one get buf limit pos
+let[@inline] r_2 get buf limit pos = readn (Len.unsafe 2) get buf limit pos
+let[@inline] r_4 get buf limit pos = readn (Len.unsafe 4) get buf limit pos
+let[@inline] r_8 get buf limit pos = readn (Len.unsafe 8) get buf limit pos
+
 let rec apply : type a b. b -> (a, b) freaders -> a fread
   = fun ctor rs ->
     match rs with
@@ -480,10 +491,37 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
           Bin_error.need_bytes ~limit ~offset ~need:Len.one;
           (pos := Off.(offset +> Len.one));
           S.unsafe_get buf (offset :> int)
+    | UInt8 -> r_1 S.unsafe_get_uint8
+    | Int8 -> r_1 S.unsafe_get_int8
+    | UInt16 Big_endian -> r_2 S.unsafe_get_uint16_be
+    | UInt16 Little_endian -> r_2 S.unsafe_get_uint16_le
+    | UInt16 Native_endian -> r_2 S.unsafe_get_uint16_ne
+    | Int16 Big_endian -> r_2 S.unsafe_get_int16_be
+    | Int16 Little_endian -> r_2 S.unsafe_get_int16_le
+    | Int16 Native_endian -> r_2 S.unsafe_get_int16_ne
+    | Int32 Big_endian -> r_4 S.unsafe_get_int32_be
+    | Int32 Little_endian -> r_4 S.unsafe_get_int32_le
+    | Int32 Native_endian -> r_4 S.unsafe_get_int32_ne
+    | Int64 Big_endian -> r_8 S.unsafe_get_int64_be
+    | Int64 Little_endian -> r_8 S.unsafe_get_int64_le
+    | Int64 Native_endian -> r_8 S.unsafe_get_int64_ne
     | Bytes len -> payload len (fun buf ~off ~len -> S.sub_string buf ~off ~len)
     | Bstr len -> payload len (fun buf ~off ~len -> S.sub_bstr buf ~off ~len)
     | Var_int -> read_varint
-    | _ -> assert false
+    | Until chr ->
+        fun buf limit pos ->
+          let offset = !pos in
+          let idx =
+            S.index_from buf ~off:(offset :> int) ~limit:(limit :> int) chr
+          in
+          if idx < 0 then
+            Bin_error.truncated ~offset ~need:Len.one
+              ~have:(have ~limit ~offset);
+          pos := Off.unsafe idx;
+          S.sub_string buf
+            ~off:(offset :> int)
+            ~len:(Off.(unsafe idx -- offset) :> int)
+    | Const v -> fun _ _ _ -> v
   and payload : type a.
       len -> (S.t -> off:int -> len:int -> a) -> S.t -> abs -> pos -> a =
    fun len extract ->
