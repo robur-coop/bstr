@@ -403,7 +403,7 @@ and static_primary_at : type a.
       narrow ~w:Len.one ~signed:false ~big:true fn
   | Int8 ->
       let fn buf offset = S.unsafe_get_int8 buf (Off.at offset delta :> int) in
-      narrow ~w:Len.one ~signed:false ~big:true fn
+      narrow ~w:Len.one ~signed:true ~big:true fn
   | UInt16 endian ->
       let get =
         match endian with
