@@ -29,8 +29,10 @@ type ('a, 'b) freaders =
 type 'a sread = S.t -> abs -> 'a
 
 type _ static_operation =
-  | Iraw : { q: rel; sh: int; mk: int; sg: int } -> int static_operation
-  | Iswap : { q: rel; sh: int; mk: int; sg: int } -> int static_operation
+  | Iu : { q: rel; lsh: int; rsh: int } -> int static_operation
+  | Is : { q: rel; lsh: int; rsh: int } -> int static_operation
+  | Iu_swap : { q: rel; lsh: int; rsh: int } -> int static_operation
+  | Is_swap : { q: rel; lsh: int; rsh: int } -> int static_operation
   | Ofun : 'a sread -> 'a static_operation
 
 type ('a, 'b) sreaders =
@@ -40,14 +42,18 @@ type ('a, 'b) sreaders =
 let[@inline] static_exec : type a. a static_operation -> S.t -> abs -> a =
  fun operation buf offset ->
   match operation with
-  | Iraw { q; sh; mk; sg } ->
+  | Iu { q; lsh; rsh } ->
       let w = S.unsafe_get_int64_ne buf (Off.at offset q :> int) in
-      let v = Int64.to_int (Int64.shift_right_logical w sh) land mk in
-      (v lxor sg) - sg
-  | Iswap { q; sh; mk; sg } ->
+      Int64.to_int (Int64.shift_right_logical (Int64.shift_left w lsh) rsh)
+  | Is { q; lsh; rsh } ->
+      let w = S.unsafe_get_int64_ne buf (Off.at offset q :> int) in
+      Int64.to_int (Int64.shift_right (Int64.shift_left w lsh) rsh)
+  | Iu_swap { q; lsh; rsh } ->
       let w = S.swap64 (S.unsafe_get_int64_ne buf (Off.at offset q :> int)) in
-      let v = Int64.to_int (Int64.shift_right_logical w sh) land mk in
-      (v lxor sg) - sg
+      Int64.to_int (Int64.shift_right_logical (Int64.shift_left w lsh) rsh)
+  | Is_swap { q; lsh; rsh } ->
+      let w = S.swap64 (S.unsafe_get_int64_ne buf (Off.at offset q :> int)) in
+      Int64.to_int (Int64.shift_right (Int64.shift_left w lsh) rsh)
   | Ofun fn -> fn buf offset
 
 [@@@ocamlformat "disable"]
@@ -315,14 +321,21 @@ let narrow ~(win : Len.t) ~(delta : rel) ~(w : Len.t) ~signed ~big ~fallback =
   let win = Len.to_int win and delta = Off.to_int delta and w = Len.to_int w in
   if win < 8 || delta + w > win then Ofun fallback
   else begin
+    (* NOTE(dinosaure): for [w = 1], we don't need to care about
+       big,little}-endian. We fallback to the [I{s,u}] case and avoid a [swap].
+     *)
+    let big = if w = 1 then Sys.big_endian else big in
     let q = if delta <= win - 8 then delta else win - 8 in
     let j = delta - q in
     let q = Off.unsafe q in
-    let mk = (1 lsl (8 * w)) - 1 in
-    let sg = if signed then 1 lsl ((8 * w) - 1) else 0 in
     let sh = if big then 8 * (8 - j - w) else 8 * j in
-    if big <> Sys.big_endian then Iswap { q; sh; mk; sg }
-    else Iraw { q; sh; mk; sg }
+    let lsh = 64 - sh - (8 * w) in
+    let rsh = 64 - (8 * w) in
+    match (big <> Sys.big_endian, signed) with
+    | false, false -> Iu { q; lsh; rsh }
+    | false, true -> Is { q; lsh; rsh }
+    | true, false -> Iu_swap { q; lsh; rsh }
+    | true, true -> Is_swap { q; lsh; rsh }
   end
 
 let rec static_reader_at : type a.
