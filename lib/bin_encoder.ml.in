@@ -16,79 +16,64 @@ type rel = Off.rel Off.t
    The trick [let _ = (); fun _ ->] is important here to ensure that the
    function has an arity of 3 when it is specialised. *)
 
-let w_char delta get =
-  ();
-  fun v buf off -> S.unsafe_set buf (Off.at off delta :> int) (get v)
+let w_char delta get = (); fun v buf off ->
+  S.unsafe_set buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_ui8 delta get =
-  ();
-  fun v buf off -> S.unsafe_set_uint8 buf (Off.at off delta :> int) (get v)
+let w_ui8 delta get = (); fun v buf off ->
+  S.unsafe_set_uint8 buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_i8 delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int8 buf (Off.at off delta :> int) (get v)
+let w_i8 delta get = (); fun v buf off ->
+  S.unsafe_set_int8 buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_ui16_le delta get =
-  ();
-  fun v buf off -> S.unsafe_set_uint16_le buf (Off.at off delta :> int) (get v)
+let w_ui16_le delta get = (); fun v buf off ->
+  S.unsafe_set_uint16_le buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_ui16_be delta get =
-  ();
-  fun v buf off -> S.unsafe_set_uint16_be buf (Off.at off delta :> int) (get v)
+let w_ui16_be delta get = (); fun v buf off ->
+  S.unsafe_set_uint16_be buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_ui16_ne delta get =
-  ();
-  fun v buf off -> S.unsafe_set_uint16_ne buf (Off.at off delta :> int) (get v)
+let w_ui16_ne delta get = (); fun v buf off ->
+  S.unsafe_set_uint16_ne buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_i16_le delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int16_le buf (Off.at off delta :> int) (get v)
+let w_i16_le delta get = (); fun v buf off ->
+  S.unsafe_set_int16_le buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_i16_be delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int16_be buf (Off.at off delta :> int) (get v)
+let w_i16_be delta get = (); fun v buf off ->
+  S.unsafe_set_int16_be buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_i16_ne delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int16_ne buf (Off.at off delta :> int) (get v)
+let w_i16_ne delta get = (); fun v buf off ->
+  S.unsafe_set_int16_ne buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_i32_le delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int32_le buf (Off.at off delta :> int) (get v)
+let w_i32_le delta get = (); fun v buf off ->
+  S.unsafe_set_int32_le buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_i32_be delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int32_be buf (Off.at off delta :> int) (get v)
+let w_i32_be delta get = (); fun v buf off ->
+  S.unsafe_set_int32_be buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_i32_ne delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int32_ne buf (Off.at off delta :> int) (get v)
+let w_i32_ne delta get = (); fun v buf off ->
+  S.unsafe_set_int32_ne buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_i64_le delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int64_le buf (Off.at off delta :> int) (get v)
+let w_i64_le delta get = (); fun v buf off ->
+  S.unsafe_set_int64_le buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_i64_be delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int64_be buf (Off.at off delta :> int) (get v)
+let w_i64_be delta get = (); fun v buf off ->
+  S.unsafe_set_int64_be buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
-let w_i64_ne delta get =
-  ();
-  fun v buf off -> S.unsafe_set_int64_ne buf (Off.at off delta :> int) (get v)
+let w_i64_ne delta get = (); fun v buf off ->
+  S.unsafe_set_int64_ne buf (Off.at off delta :> int) (get v)
 [@@inline always]
 
 let w_ignore3 _ _ _ = ()
@@ -97,40 +82,32 @@ let w_ignore3 _ _ _ = ()
 
 let w_ignore4 _ _ _ _ = ()
 
-let[@inline always] w_1 set =
-  ();
-  fun v buf limit pos ->
-    let offset = !pos in
-    Bin_error.need_bytes ~limit ~offset ~need:Len.one;
-    (pos := Off.(offset +> Len.one));
-    set buf (offset :> int) v
+let[@inline always] w_1 set = (); fun v buf limit pos ->
+  let offset = !pos in
+  Bin_error.need_bytes ~limit ~offset ~need:Len.one;
+  (pos := Off.(offset +> Len.one));
+  set buf (offset :> int) v
 
-let[@inline always] w_2 set =
-  ();
-  fun v buf limit pos ->
-    let _2 = Len.v 2 in
-    let offset = !pos in
-    Bin_error.need_bytes ~limit ~offset ~need:_2;
-    (pos := Off.(offset +> _2));
-    set buf (offset :> int) v
+let[@inline always] w_2 set = (); fun v buf limit pos ->
+  let _2 = Len.unsafe 2 in
+  let offset = !pos in
+  Bin_error.need_bytes ~limit ~offset ~need:_2;
+  (pos := Off.(offset +> _2));
+  set buf (offset :> int) v
 
-let[@inline always] w_4 set =
-  ();
-  fun v buf limit pos ->
-    let _4 = Len.v 4 in
-    let offset = !pos in
-    Bin_error.need_bytes ~limit ~offset ~need:_4;
-    (pos := Off.(offset +> _4));
-    set buf (offset :> int) v
+let[@inline always] w_4 set = (); fun v buf limit pos ->
+  let _4 = Len.unsafe 4 in
+  let offset = !pos in
+  Bin_error.need_bytes ~limit ~offset ~need:_4;
+  (pos := Off.(offset +> _4));
+  set buf (offset :> int) v
 
-let[@inline always] w_8 set =
-  ();
-  fun v buf limit pos ->
-    let _8 = Len.v 8 in
-    let offset = !pos in
-    Bin_error.need_bytes ~limit ~offset ~need:_8;
-    (pos := Off.(offset +> _8));
-    set buf (offset :> int) v
+let[@inline always] w_8 set = (); fun v buf limit pos ->
+  let _8 = Len.unsafe 8 in
+  let offset = !pos in
+  Bin_error.need_bytes ~limit ~offset ~need:_8;
+  (pos := Off.(offset +> _8));
+  set buf (offset :> int) v
 
 (* Thanks, god! *)
 [@@@ocamlformat "enable"]
@@ -380,9 +357,9 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
         fun v buf limit pos ->
           let offset = !pos in
           let n = String.length v in
-          Bin_error.need_bytes ~limit ~offset ~need:(Len.v n);
+          Bin_error.need_bytes ~limit ~offset ~need:(Len.unsafe n);
           S.blit_from_string v ~src_off:0 buf ~dst_off:(offset :> int) ~len:n;
-          pos := Off.(offset +> Len.v n)
+          pos := Off.(offset +> Len.unsafe n)
     | Bytes len ->
         let blit v buf ~off ~len =
           S.blit_from_string v ~src_off:0 buf ~dst_off:off ~len
@@ -413,26 +390,25 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
           if got <> n then
             Bin_error.length_mismatch ~offset:!pos ~expected:n ~got;
           let offset = !pos in
-          Bin_error.need_bytes ~limit ~offset ~need:(Len.v n);
+          Bin_error.need_bytes ~limit ~offset ~need:(Len.unsafe n);
           blit v buf ~off:(offset :> int) ~len:n;
-          pos := Off.(offset +> Len.v n)
-        (* TODO(dinosaure): [Fixed of Len.t] instead of [Fixed of int] *)
+          pos := Off.(offset +> Len.unsafe n)
     | Prefix t ->
         let wr = go t in
         fun v buf limit pos ->
           let n = length v in
           wr n buf limit pos;
           let offset = !pos in
-          Bin_error.need_bytes ~limit ~offset ~need:(Len.v n);
+          Bin_error.need_bytes ~limit ~offset ~need:(Len.unsafe n);
           blit v buf ~off:(offset :> int) ~len:n;
-          pos := Off.(offset +> Len.v n)
+          pos := Off.(offset +> Len.unsafe n)
     | Rest ->
         fun v buf limit pos ->
           let n = length v in
           let offset = !pos in
-          Bin_error.need_bytes ~limit ~offset ~need:(Len.v n);
+          Bin_error.need_bytes ~limit ~offset ~need:(Len.unsafe n);
           blit v buf ~off:(offset :> int) ~len:n;
-          pos := Off.(offset +> Len.v n)
+          pos := Off.(offset +> Len.unsafe n)
     | Delim chr ->
         fun v buf limit pos ->
           if contains v chr then
@@ -442,10 +418,10 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
               chr;
           let n = length v in
           let offset = !pos in
-          Bin_error.need_bytes ~limit ~offset ~need:Len.(v n + one);
+          Bin_error.need_bytes ~limit ~offset ~need:Len.(unsafe n + one);
           blit v buf ~off:(offset :> int) ~len:n;
-          S.unsafe_set buf (Off.(offset +> Len.v n) :> int) chr;
-          pos := Off.(offset +> Len.(v n + one))
+          S.unsafe_set buf (Off.(offset +> Len.unsafe n) :> int) chr;
+          pos := Off.(offset +> Len.(unsafe n + one))
   in
   go root
 
