@@ -456,10 +456,12 @@ and static_primary_at : type a.
       narrow ~w:(Len.unsafe 2) ~signed:true ~big:(big_endian endian) fn
   (* TODO(dinosaure): trick with bigarray and Bigarray.int{32,64}? *)
   | Int32 endian ->
-      let get = match endian with
+      let get =
+        match endian with
         | Big_endian -> S.unsafe_get_int32_be
         | Little_endian -> S.unsafe_get_int32_le
-        | Native_endian -> S.unsafe_get_int32_ne in
+        | Native_endian -> S.unsafe_get_int32_ne
+      in
       let fn buf offset = get buf (Off.at offset delta :> int) in
       narrow32 ~big:(big_endian endian) fn
   | Int64 Big_endian ->
