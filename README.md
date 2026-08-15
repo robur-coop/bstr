@@ -23,13 +23,13 @@ libraries:
 
 |                 | bstr | cstruct | bigstringaf | slice.bstr |
 |-----------------|------|---------|-------------|------------|
-|       `overlap` |   ✅ |      ❌ |          ❌ |         ✅ |
-|        `memcpy` |   ✅ |      ❌ |          ✅ |         ✅ |
-|       `memmove` |   ✅ |      ✅ |          ✅ |         ✅ |
-|      fast `sub` |   ❌ |      ❌ |          ❌ |         ✅ |
-|     fast `blit` |   ✅ |      ❌ |          ❌ |         ✅ |
-| release GC lock |   ✅ |      ❌ |          ❌ |         ✅ |
-| fast `contains` |   ✅ |      ❌ |          ✅ |         ✅ |
+|       `overlap` |    ✔ |       ☓ |           ☓ |          ✔ |
+|        `memcpy` |    ✔ |       ☓ |           ☓ |          ✔ |
+|       `memmove` |    ✔ |       ✔ |           ✔ |          ✔ |
+|      fast `sub` |    ☓ |       ☓ |           ☓ |          ✔ |
+|     fast `blit` |    ✔ |       ☓ |           ☓ |          ✔ |
+| release GC lock |    ✔ |       ☓ |           ☓ |          ✔ |
+| fast `contains` |    ✔ |       ☓ |           ✔ |          ✔ |
 
 ### Fast `sub`
 
@@ -54,9 +54,9 @@ for `Bstr.t` values is equivalent.
 Here is a comparative table of the `sub` function between all implementations
 (AMD Ryzen 9 7950X 16-Core Processor):
 
-|       | bigstringaf |   bstr | cstruct | slice |
-|-------|-------------|--------|---------|-------|
-| `sub` |     20.0 ns | 17.8ns |   2.8ns | 2.4ns |
+|       | bigstringaf |   bstr | cstruct | slice     |
+|-------|-------------|--------|---------|-----------|
+| `sub` |      20.0ns | 17.8ns |   2.8ns | **2.4ns** |
 
 ### Fast `blit`
 
@@ -68,9 +68,9 @@ Here is a comparative table of the `sub` function between all implementations
 Here is a comparative table of the `blit_from_string` function between all the
 implementations:
 
-|                    | bigstringaf |  bstr | cstruct |
-|--------------------|-------------|-------|---------|
-| `blit_from_string` |       5.1ns | 4.3ns |   4.7ns |
+|                    | bigstringaf |  bstr     | cstruct |
+|--------------------|-------------|-----------|---------|
+| `blit_from_string` |       5.1ns | **4.3ns** |   4.7ns |
 
 #### _mmaped_ or not? (GC lock)
 
@@ -113,7 +113,61 @@ source refers to a memory area that is not shared with the destination.
 To find out, you can use the `Bstr.overlap` function, which checks whether or
 not the two bigarrays given have a common memory area.
 
+### Fast decoder
+
+The `bin` package is a package that allows binary data to be encoded and
+decoded according to a format that can be described in OCaml. For example, here
+is how an IPv4 packet can be described:
+
+```ocaml
+let ipv4 =
+  let fn vihl tos total_length id ff ttl protocol chk src dst =
+    let version = vihl lsr 4 in
+    let ihl = vihl land 0x0f in
+    let flags = ff lsr 13 in
+    { version; ihl; tos; total_length; id; flags; ttl; protocol; chk; src; dst }
+  in
+  let open Bin in
+  record ~name:"ipv4" fn
+  |+ field ~name:"vihl" uint8 (fun t -> (t.version lsl 4) lor t.ihl)
+  |+ field ~name:"tos" uint8 (fun t -> t.tos)
+  |+ field ~name:"total_length" beuint16 (fun t -> t.total_length)
+  |+ field ~name:"id" beuint16 (fun t -> t.id)
+  |+ field ~name:"flags" beuint16 (fun t -> t.flags lsl 13)
+  |+ field ~name:"ttl" uint8 (fun t -> t.ttl)
+  |+ field ~name:"protocol" uint8 (fun t -> t.protocol)
+  |+ field ~name:"checksum" beuint16 (fun t -> t.chk)
+  |+ field ~name:"src" beint32 (fun t -> t.src)
+  |+ field ~name:"dst" beint32 (fun t -> t.dst)
+  |> sealr
+```
+
+The advantage of such an approach is that offsets and bound checks can be
+verified automatically rather than using a _manual_ approach. However, deriving
+such a description incurs costs that we would not incur if we were to perform
+the decoding _manually_ (at the very least, OCaml optimises _manual_ code
+better than the decoder generated from such a description).
+
+This is an approach found in [repr][repr], [data-encoding][data-encoding] and
+[ocaml-wire][ocaml-wire]. In particular, `bin` is based on the approach taken
+by `repr`. However, `bin` aims to be highly efficient and relies on two
+optimisations:
+1) avoiding `caml_apply` when constructing user values
+2) performing _fusion_[^2] for values of type `{,u}int8`, `{,u}int16{be,le,ne}`
+   and `int{32,64}{be,le,ne}`.
+
+Here are the results when decoding an IPv4 packet:
+
+|      | bin         |    repr |  wire | data-encoding | handwritten |
+|------|-------------|---------|-------|---------------|-------------|
+| ipv4 | **18.66ns** | 94.87ns | 127ns |       139.2ns |     5.971ns |
+
 [^1]: `Bin` is currently being designed with this in mind.
+[^2]: Fusion involves loading an 8-byte word to extract several smaller pieces
+of information (such as `uint16be`s). It is not implemented in the code (OCaml
+is not smart enough to optimise such a path): in other words, we will repeat
+the access to an 8-byte word several times in the code (in both OCaml and
+assembly). However, modern CPUs are intelligent enough to perform this fusion.
 
 [astring]: https://github.com/dbuenzli/astring
 [cstruct]: https://github.com/mirage/ocaml-cstruct
