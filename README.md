@@ -120,12 +120,27 @@ decoded according to a format that can be described in OCaml. For example, here
 is how an IPv4 packet can be described:
 
 ```ocaml
+type ipv4 =
+  { version: int
+  ; ihl: int
+  ; tos: int
+  ; total_length: int
+  ; id: int
+  ; flags: int
+  ; offset: int
+  ; ttl: int
+  ; protocol: int
+  ; chk: int
+  ; src: int32
+  ; dst: int32 }
+
 let ipv4 =
   let fn vihl tos total_length id ff ttl protocol chk src dst =
     let version = vihl lsr 4 in
     let ihl = vihl land 0x0f in
     let flags = ff lsr 13 in
-    { version; ihl; tos; total_length; id; flags; ttl; protocol; chk; src; dst }
+    let offset = ff land 0x1fff in
+    { version; ihl; tos; total_length; id; flags; offset; ttl; protocol; chk; src; dst }
   in
   let open Bin in
   record ~name:"ipv4" fn
@@ -133,7 +148,7 @@ let ipv4 =
   |+ field ~name:"tos" uint8 (fun t -> t.tos)
   |+ field ~name:"total_length" beuint16 (fun t -> t.total_length)
   |+ field ~name:"id" beuint16 (fun t -> t.id)
-  |+ field ~name:"flags" beuint16 (fun t -> t.flags lsl 13)
+  |+ field ~name:"flags_and_offset" beuint16 (fun t -> (t.flags lsl 13) lor t.offset)
   |+ field ~name:"ttl" uint8 (fun t -> t.ttl)
   |+ field ~name:"protocol" uint8 (fun t -> t.protocol)
   |+ field ~name:"checksum" beuint16 (fun t -> t.chk)
