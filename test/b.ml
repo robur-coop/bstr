@@ -4,15 +4,17 @@ let test01 =
   let descr = {text|cstring|text} in
   Test.test ~title:"cstring" ~descr @@ fun () ->
   let buf = Bstr.create 0x7ff in
+  let enc = Bin.Staged.unstage (Bin.encode_bstr Bin.cstring) in
+  let dec = Bin.Staged.unstage (Bin.decode_bstr Bin.cstring) in
   let test str =
     let pos = ref Bin.Off.zero in
     let len = String.length str in
-    Bin.encode_bstr Bin.cstring str buf pos;
+    enc str buf pos;
     check ((!pos :> int) == len + 1);
     check (Bstr.get_uint8 buf len == 0);
     check (Bstr.sub_string buf ~off:0 ~len = str);
     pos := Bin.Off.zero;
-    let str' = Bin.decode_bstr Bin.cstring buf pos in
+    let str' = dec buf pos in
     check ((!pos :> int) == len + 1);
     check (str = str')
   in
@@ -22,14 +24,16 @@ let test02 =
   let descr = {text|varint|text} in
   Test.test ~title:"varint" ~descr @@ fun () ->
   let buf = Bstr.create 0x7ff in
+  let enc = Bin.Staged.unstage (Bin.encode_bstr Bin.varint) in
+  let dec = Bin.Staged.unstage (Bin.decode_bstr Bin.varint) in
   let test value expected =
     let pos = ref Bin.Off.zero in
-    Bin.encode_bstr Bin.varint value buf pos;
+    enc value buf pos;
     let len = String.length expected in
     check ((!pos :> int) == len);
     check (Bstr.sub_string buf ~off:0 ~len = expected);
     pos := Bin.Off.zero;
-    let value' = Bin.decode_bstr Bin.varint buf pos in
+    let value' = dec buf pos in
     check ((!pos :> int) == len);
     check (value == value')
   in
@@ -63,14 +67,16 @@ let test03 =
     |+ field neint64 (fun (_, b) -> b)
     |> sealr
   in
+  let enc = Bin.Staged.unstage (Bin.encode_bstr t) in
+  let dec = Bin.Staged.unstage (Bin.decode_bstr t) in
   let test value expected =
     let pos = ref Bin.Off.zero in
-    Bin.encode_bstr t value buf pos;
+    enc value buf pos;
     let len = String.length expected in
     check ((!pos :> int) == len);
     check (Bstr.sub_string buf ~off:0 ~len = expected);
     pos := Bin.Off.zero;
-    let value' = Bin.decode_bstr t buf pos in
+    let value' = dec buf pos in
     check ((!pos :> int) == len);
     check (value = value')
   in

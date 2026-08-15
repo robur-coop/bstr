@@ -272,14 +272,14 @@ val sealv : ?tag:int t -> ('a, 'b, 'a -> 'a case_p) open_variant -> 'a t
 
 (** {2:decoder Decoder.} *)
 
-val decode_bstr : 'a t -> Bstr.t -> pos -> 'a
+val decode_bstr : 'a t -> (Bstr.t -> pos -> 'a) Staged.t
 (** [decode_bstr repr] is the binary decoder for values of type [repr]. *)
 
 val decode : 'a t -> (string -> pos -> 'a) Staged.t
 
 (** {2:encoder Encoder.} *)
 
-val encode_bstr : 'a t -> 'a -> Bstr.t -> pos -> unit
+val encode_bstr : 'a t -> ('a -> Bstr.t -> pos -> unit) Staged.t
 
 module Size : sig
   type 'a s = private

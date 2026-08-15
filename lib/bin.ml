@@ -29,8 +29,8 @@ module Bstr = struct
   include Bin_encoder_bstr
 end
 
-let encode_bstr = Bstr.encode
-let decode_bstr = Bstr.decode
+let encode_bstr t = Staged.stage (Bstr.encode t)
+let decode_bstr t = Staged.stage (Bstr.decode t)
 let decode t = Staged.stage (String.decode t)
 
 let size_of_value t value =
