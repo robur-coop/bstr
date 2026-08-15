@@ -16,6 +16,6 @@ depends: [
   "ocaml"       {>= "4.14.0"}
   "dune"        {>= "3.5.0"}
   "bstr"        {= version}
-  "crowbar"     {with-test}
+  "crowbar"     {>= "0.2.2" & with-test}
 ]
 x-maintenance-intent: [ "(latest)" ]
