@@ -533,7 +533,9 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
     | Record r -> go_record r
     | Variant v -> go_variant v
     | Seq s -> go_seq s
-    | _ -> assert false
+    | Map { x; f; _ } ->
+        let rd = go x in
+        fun buf limit pos -> f (rd buf limit pos)
   and go_record : type a. a record -> S.t -> abs -> pos -> a =
    fun r ->
     let rname = if r.rname = "" then "record" else r.rname in
@@ -754,6 +756,21 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
           Bin_error.need_bytes ~limit ~offset ~need:(Len.unsafe n);
           (pos := Off.(offset +> Len.unsafe n));
           extract buf ~off:(offset :> int) ~len:n
+    | Prefix t ->
+        let read = go t in
+        fun buf limit pos ->
+          let n = read buf limit pos in
+          let offset = !pos in
+          if n < 0 then Bin_error.length_mismatch ~offset ~expected:0 ~got:n;
+          Bin_error.need_bytes ~limit ~offset ~need:(Len.unsafe n);
+          (pos := Off.(offset +> Len.unsafe n));
+          extract buf ~off:(offset :> int) ~len:n
+    | Rest ->
+        fun buf limit pos ->
+          let offset = !pos in
+          let n = have ~limit ~offset in
+          (pos := Off.(offset +> n));
+          extract buf ~off:(offset :> int) ~len:(Len.to_int n)
     | Delim chr ->
         fun buf limit pos ->
           let offset = !pos in
@@ -765,7 +782,6 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
               ~have:(have ~limit ~offset);
           (pos := Off.(v idx +> Len.one));
           extract buf ~off:(offset :> int) ~len:(Off.(v idx -- offset) :> int)
-    | _ -> assert false
   in
   go root
 
