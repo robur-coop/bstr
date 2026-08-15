@@ -8,6 +8,7 @@ type ipv4 = {
   ; total_length: int
   ; id: int
   ; flags: int
+  ; frag_offset: int
   ; ttl: int
   ; protocol: int
   ; checksum: int
@@ -19,7 +20,7 @@ type ipv4 = {
 
 let packet =
   "\x45\x00\x00\x3c\
-   \x1c\x46\x40\x00\
+   \x1c\x46\x20\xb9\
    \x40\x06\xb1\xe6\
    \xc0\xa8\x00\x68\
    \xc0\xa8\x00\x01"
@@ -43,6 +44,7 @@ let handwritten_decode bstr =
   ; total_length
   ; id
   ; flags= ff lsr 13
+  ; frag_offset= ff land 0x1fff
   ; ttl
   ; protocol
   ; checksum
@@ -55,7 +57,7 @@ let handwritten_encode v bstr =
   Bstr.set_uint8 bstr 1 v.tos;
   Bstr.set_uint16_be bstr 2 v.total_length;
   Bstr.set_uint16_be bstr 4 v.id;
-  Bstr.set_uint16_be bstr 6 (v.flags lsl 13);
+  Bstr.set_uint16_be bstr 6 ((v.flags lsl 13) lor v.frag_offset);
   Bstr.set_uint8 bstr 8 v.ttl;
   Bstr.set_uint8 bstr 9 v.protocol;
   Bstr.set_uint16_be bstr 10 v.checksum;
@@ -76,6 +78,7 @@ let bin_ipv4 =
     ; total_length
     ; id
     ; flags= ff lsr 13
+    ; frag_offset= ff land 0x1fff
     ; ttl
     ; protocol
     ; checksum
@@ -89,7 +92,8 @@ let bin_ipv4 =
   |+ field ~name:"tos" uint8 (fun t -> t.tos)
   |+ field ~name:"total_length" beuint16 (fun t -> t.total_length)
   |+ field ~name:"id" beuint16 (fun t -> t.id)
-  |+ field ~name:"flags" beuint16 (fun t -> t.flags lsl 13)
+  |+ field ~name:"flags_frag" beuint16 (fun t ->
+      (t.flags lsl 13) lor t.frag_offset)
   |+ field ~name:"ttl" uint8 (fun t -> t.ttl)
   |+ field ~name:"protocol" uint8 (fun t -> t.protocol)
   |+ field ~name:"checksum" beuint16 (fun t -> t.checksum)
@@ -111,6 +115,7 @@ let repr_ipv4 =
     ; total_length= (tl_hi lsl 8) lor tl_lo
     ; id= (id_hi lsl 8) lor id_lo
     ; flags= ((ff_hi lsl 8) lor ff_lo) lsr 13
+    ; frag_offset= (ff_hi lsl 8) lor ff_lo land 0x1fff
     ; ttl
     ; protocol
     ; checksum= (ck_hi lsl 8) lor ck_lo
@@ -127,8 +132,8 @@ let repr_ipv4 =
   |+ field "total_length_lo" byte (fun t -> lo t.total_length)
   |+ field "id_hi" byte (fun t -> hi t.id)
   |+ field "id_lo" byte (fun t -> lo t.id)
-  |+ field "flags_hi" byte (fun t -> hi (t.flags lsl 13))
-  |+ field "flags_lo" byte (fun t -> lo (t.flags lsl 13))
+  |+ field "flags_hi" byte (fun t -> hi ((t.flags lsl 13) lor t.frag_offset))
+  |+ field "flags_lo" byte (fun t -> lo ((t.flags lsl 13) lor t.frag_offset))
   |+ field "ttl" byte (fun t -> t.ttl)
   |+ field "protocol" byte (fun t -> t.protocol)
   |+ field "checksum_hi" byte (fun t -> hi t.checksum)
@@ -153,7 +158,7 @@ let data_encoding_ipv4 =
     , t.tos
     , t.total_length
     , t.id
-    , t.flags lsl 13
+    , (t.flags lsl 13) lor t.frag_offset
     , t.ttl
     , t.protocol
     , t.checksum
@@ -168,6 +173,7 @@ let data_encoding_ipv4 =
     ; total_length
     ; id
     ; flags= ff lsr 13
+    ; frag_offset= ff land 0x1fff
     ; ttl
     ; protocol
     ; checksum
@@ -218,6 +224,7 @@ let wire_ipv4 =
     ; total_length
     ; id
     ; flags= ff lsr 13
+    ; frag_offset= ff land 0x1fff
     ; ttl
     ; protocol
     ; checksum
@@ -229,8 +236,9 @@ let wire_ipv4 =
     [
       (f_vihl $ fun t -> (t.version lsl 4) lor t.ihl); (f_tos $ fun t -> t.tos)
     ; (f_total_length $ fun t -> t.total_length); (f_id $ fun t -> t.id)
-    ; (f_flags $ fun t -> t.flags lsl 13); (f_ttl $ fun t -> t.ttl)
-    ; (f_protocol $ fun t -> t.protocol); (f_checksum $ fun t -> t.checksum)
+    ; (f_flags $ fun t -> (t.flags lsl 13) lor t.frag_offset)
+    ; (f_ttl $ fun t -> t.ttl); (f_protocol $ fun t -> t.protocol)
+    ; (f_checksum $ fun t -> t.checksum)
     ; (f_src $ fun t -> Stdlib.Int32.to_int t.src)
     ; (f_dst $ fun t -> Stdlib.Int32.to_int t.dst)
     ]
@@ -260,6 +268,7 @@ let angstrom =
     ; total_length
     ; id
     ; flags= ff lsr 13
+    ; frag_offset= ff land 0x1fff
     ; ttl
     ; protocol
     ; checksum
@@ -278,7 +287,7 @@ let faraday_encode v =
   Faraday.write_uint8 t v.tos;
   Faraday.BE.write_uint16 t v.total_length;
   Faraday.BE.write_uint16 t v.id;
-  Faraday.BE.write_uint16 t (v.flags lsl 13);
+  Faraday.BE.write_uint16 t ((v.flags lsl 13) lor v.frag_offset);
   Faraday.write_uint8 t v.ttl;
   Faraday.write_uint8 t v.protocol;
   Faraday.BE.write_uint16 t v.checksum;
@@ -304,6 +313,7 @@ let cstruct cs =
   ; total_length
   ; id
   ; flags= ff lsr 13
+  ; frag_offset= ff land 0x1fff
   ; ttl
   ; protocol
   ; checksum
@@ -324,7 +334,7 @@ let () =
   let check name str = if str <> packet then failwith ("encode: " ^ name) in
   let buf = Bstr.create len in
   bin_encode_bstr value buf (ref Bin.Off.zero);
-  check "bin (bstr)" (Bstr.to_string bstr);
+  check "bin (bstr)" (Bstr.to_string buf);
   repr_encode_buffer value;
   check "repr" (Buffer.contents repr_buffer);
   check "repr (to_bin_string)" (repr_to_string value);
