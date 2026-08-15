@@ -68,6 +68,13 @@
     go directly to OCaml values, which is generally more pleasant to manipulate
     with OCaml than to make C stubs. *)
 
+module Staged : sig
+  type +'a t
+
+  val stage : 'a -> 'a t
+  val unstage : 'a t -> 'a
+end
+
 module Off : sig
   type 'w t = private int
   type abs
@@ -82,7 +89,6 @@ end
 
 type pos = Off.abs Off.t ref
 type len
-
 type 'a t
 
 (** {1:primitives Primitives.} *)
@@ -269,7 +275,7 @@ val sealv : ?tag:int t -> ('a, 'b, 'a -> 'a case_p) open_variant -> 'a t
 val decode_bstr : 'a t -> Bstr.t -> pos -> 'a
 (** [decode_bstr repr] is the binary decoder for values of type [repr]. *)
 
-val decode : 'a t -> string -> pos -> 'a
+val decode : 'a t -> (string -> pos -> 'a) Staged.t
 
 (** {2:encoder Encoder.} *)
 

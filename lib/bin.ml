@@ -31,7 +31,7 @@ end
 
 let encode_bstr = Bstr.encode
 let decode_bstr = Bstr.decode
-let decode = String.decode
+let decode t = Staged.stage (String.decode t)
 
 let size_of_value t value =
   match (Size.make t).Size.of_value with
@@ -143,8 +143,7 @@ let sealv ?tag:(vtag = varint) v =
   let fn c =
     let t = Case.tag c in
     if t < 0 then
-      invalid_argf "Bin.sealv: case %s has a negative tag (%d)" (Case.name c)
-        t;
+      invalid_argf "Bin.sealv: case %s has a negative tag (%d)" (Case.name c) t;
     match Hashtbl.find_opt seen t with
     | None -> Hashtbl.add seen t (name_of_case c)
     | Some other ->
