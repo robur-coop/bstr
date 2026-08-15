@@ -61,6 +61,14 @@ let bstr len = Primary (Bstr len)
 let cstring = Primary (Bytes (Delim '\000'))
 let until byte = Primary (Until byte)
 
+let fixed len =
+  if len < 0 then invalid_arg "Bin.fiex: negative length";
+  Fixed len
+
+let prefix t = Prefix t
+let delim chr = Delim chr
+let rest = Rest
+
 let reject fn = function
   | Delim _ -> invalid_argf "%s: a delimited cannot bound s sequence" fn
   | slen -> slen

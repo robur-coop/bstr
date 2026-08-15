@@ -139,6 +139,10 @@ val neint64 : int64 t
 (** [neint64] is a representation of native-endian 64-bit integers. *)
 
 val varint : int t
+val fixed : int -> len
+val delim : char -> len
+val prefix : int t -> len
+val rest : len
 
 val bytes : len -> string t
 (** [bytes n] is a representation of a bytes sequence of [n] byte(s). *)
