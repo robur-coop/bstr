@@ -33,6 +33,8 @@ type _ static_operation =
   | Is : { q: rel; lsh: int; rsh: int } -> int static_operation
   | Iu_swap : { q: rel; lsh: int; rsh: int } -> int static_operation
   | Is_swap : { q: rel; lsh: int; rsh: int } -> int static_operation
+  | I32raw : { q: rel; sh: int } -> int32 static_operation
+  | I32swap : { q: rel; sh: int } -> int32 static_operation
   | Ofun : 'a sread -> 'a static_operation
 
 type ('a, 'b) sreaders =
@@ -54,6 +56,12 @@ let[@inline] static_exec : type a. a static_operation -> S.t -> abs -> a =
   | Is_swap { q; lsh; rsh } ->
       let w = S.swap64 (S.unsafe_get_int64_ne buf (Off.at offset q :> int)) in
       Int64.to_int (Int64.shift_right (Int64.shift_left w lsh) rsh)
+  | I32raw { q; sh } ->
+      let w = S.unsafe_get_int64_ne buf (Off.at offset q :> int) in
+      Int64.to_int32 (Int64.shift_right_logical w sh)
+  | I32swap { q; sh } ->
+      let w = S.swap64 (S.unsafe_get_int64_ne buf (Off.at offset q :> int)) in
+      Int64.to_int32 (Int64.shift_right_logical w sh)
   | Ofun fn -> fn buf offset
 
 [@@@ocamlformat "disable"]
@@ -338,6 +346,16 @@ let narrow ~(win : Len.t) ~(delta : rel) ~(w : Len.t) ~signed ~big ~fallback =
     | true, true -> Is_swap { q; lsh; rsh }
   end
 
+let narrow32 ~(win : Len.t) ~delta:(q : rel) ~big ~fallback =
+  let win = Len.to_int win and delta = Off.to_int q in
+  if win < 8 || delta + 4 > win then Ofun fallback
+  else
+    let q = if delta <= win - 8 then delta else win - 8 in
+    let j = delta - q in
+    let sh = if big then 8 * (8 - j - 4) else 8 * j in
+    let q = Off.unsafe q in
+    if big <> Sys.big_endian then I32swap { q; sh } else I32raw { q; sh }
+
 let rec static_reader_at : type a.
     win:Len.t -> rel -> a t -> a static_operation option =
  fun ~win delta t ->
@@ -399,9 +417,10 @@ and static_seq : type a b.
 and static_primary_at : type a.
     win:Len.t -> rel -> a primary -> a static_operation option =
  fun ~win delta p ->
-  let narrow ~w ~signed ~big fallback =
-    Some (narrow ~win ~delta ~w ~signed ~big ~fallback)
+  let narrow ~w ~signed ~big fn =
+    Some (narrow ~win ~delta ~w ~signed ~big ~fallback:fn)
   in
+  let narrow32 ~big fn = Some (narrow32 ~win ~delta ~big ~fallback:fn) in
   let big_endian = function
     | Big_endian -> true
     | Little_endian -> false
@@ -436,21 +455,13 @@ and static_primary_at : type a.
       let fn buf offset = get buf (Off.at offset delta :> int) in
       narrow ~w:(Len.unsafe 2) ~signed:true ~big:(big_endian endian) fn
   (* TODO(dinosaure): trick with bigarray and Bigarray.int{32,64}? *)
-  | Int32 Big_endian ->
-      let fn buf offset =
-        S.unsafe_get_int32_be buf (Off.at offset delta :> int)
-      in
-      Some (Ofun fn)
-  | Int32 Little_endian ->
-      let fn buf offset =
-        S.unsafe_get_int32_le buf (Off.at offset delta :> int)
-      in
-      Some (Ofun fn)
-  | Int32 Native_endian ->
-      let fn buf offset =
-        S.unsafe_get_int32_ne buf (Off.at offset delta :> int)
-      in
-      Some (Ofun fn)
+  | Int32 endian ->
+      let get = match endian with
+        | Big_endian -> S.unsafe_get_int32_be
+        | Little_endian -> S.unsafe_get_int32_le
+        | Native_endian -> S.unsafe_get_int32_ne in
+      let fn buf offset = get buf (Off.at offset delta :> int) in
+      narrow32 ~big:(big_endian endian) fn
   | Int64 Big_endian ->
       let fn buf offset =
         S.unsafe_get_int64_be buf (Off.at offset delta :> int)

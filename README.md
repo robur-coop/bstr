@@ -158,9 +158,9 @@ optimisations:
 
 Here are the results when decoding an IPv4 packet:
 
-|      | bin         |    repr |  wire | data-encoding | handwritten |
-|------|-------------|---------|-------|---------------|-------------|
-| ipv4 | **18.66ns** | 94.87ns | 127ns |       139.2ns |     5.971ns |
+|      | bin         |    repr |  wire | data-encoding | handwritten | cstruct |
+|------|-------------|---------|-------|---------------|-------------|---------|
+| ipv4 | **17.40ns** | 94.87ns | 127ns |       139.2ns |     5.971ns | 11.66ns |
 
 [^1]: `Bin` is currently being designed with this in mind.
 [^2]: Fusion involves loading an 8-byte word to extract several smaller pieces
@@ -174,3 +174,5 @@ assembly). However, modern CPUs are intelligent enough to perform this fusion.
 [repr]: https://github.com/mirage/repr
 [bigstringaf]: https://github.com/inhabitedtype/bigstringaf
 [untagged]: https://ocaml.org/manual/5.3/attributes.html
+[data-encoding]: https://gitlab.com/nomadic-labs/data-encoding
+[ocaml-wire]: https://github.com/parsimoni-labs/ocaml-wire
