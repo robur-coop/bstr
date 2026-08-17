@@ -68,6 +68,32 @@
     go directly to OCaml values, which is generally more pleasant to manipulate
     with OCaml than to make C stubs. *)
 
+(** For performance reasons, it is sometimes preferable to handle functions
+    specialising in one or two arguments rather than applying all the function’s
+    arguments (and repeating internal calculations whenever that first or second
+    argument appears). The Staged module allows you to define a boundary between
+    what should be ‘pre-applied’ and what should be fully applied afterwards.
+
+    {[
+    let fn x =
+      let x = x + 1 in
+      Staged.stage (fun y -> x + y)
+
+    let g = fn 20
+    let () = print_int ((Staged.unstage g) 21)
+    ]}
+
+    In the example above, we prepare the function [g] so that the calculation
+    [x+1] is {i already} done and no longer needs to be performed. Furthermore,
+    the application of [g] will only involve the calculation [x+y].
+
+    In the case of [Bin], it may be useful to prepare how a format is to be
+    decoded or encoded. Furthermore, {!val:decode} and {!val:encode_bstr} return
+    a [Staged.t] value in order to force these functions to specialise via the
+    description of a binary format.
+
+    In this way, the decoder/encoder for this format is properly specialised and
+    optimised. This is the main reason for the existence of this module. *)
 module Staged : sig
   type +'a t
 
@@ -88,7 +114,6 @@ module Len : sig
 end
 
 type pos = Off.abs Off.t ref
-type len
 type 'a t
 
 (** {1:primitives Primitives.} *)
@@ -139,10 +164,26 @@ val neint64 : int64 t
 (** [neint64] is a representation of native-endian 64-bit integers. *)
 
 val varint : int t
+(** [varint] is a representation of an integer value using a sequence of bytes.
+    The number of bytes that is needed depends on the value being represented,
+    with larger magnitudes using more bytes than smaller ones. *)
+
+type len
+(** [len] is a type that represents a size (fixed or dynamic) for certain
+    primitives such as {!val:bytes} or {!val:bstr}. *)
+
 val fixed : int -> len
+(** [fixed len] is a fixed length of [len] bytes. *)
+
 val delim : char -> len
+(** [delim chr] is a length until we reach the [chr] byte. *)
+
 val prefix : int t -> len
+(** [prefix t] is a representation of a value which size is specified by a
+    {i header}/prefix [t]. *)
+
 val rest : len
+(** [rest] is the rest of the payload. *)
 
 val bytes : len -> string t
 (** [bytes n] is a representation of a bytes sequence of [n] byte(s). *)
@@ -151,13 +192,21 @@ val bstr : len -> Bstr.t t
 (** [bstr n] is a representation of a bigstring of [n] byte(s). *)
 
 val cstring : string t
+(** [cstring] is [bytes (delim '\000')]. *)
+
 val until : char -> string t
+(** [until chr] is [bytes (delim chr)]. *)
 
 val const : 'a -> 'a t
 (** [const v] is [v] without a serialization mechanism. *)
 
 val seq : len -> 'a t -> 'a array t
+(** [seq len t] is a consecutive sequence of [len] elements represented by [t].
+    It returns an array. *)
+
 val list : len -> 'a t -> 'a list t
+(** [list len t] is a consecutive sequence of [len] elements represented by [t].
+    It returns an list. *)
 
 val map : 'b t -> ('b -> 'a) -> ('a -> 'b) -> 'a t
 (** This combinator allows defining a representative of one type in terms of
@@ -284,6 +333,8 @@ val decode : 'a t -> (string -> pos -> 'a) Staged.t
 (** {2:encoder Encoder.} *)
 
 val encode_bstr : 'a t -> ('a -> Bstr.t -> pos -> unit) Staged.t
+
+(** {2:size Size of representations.} *)
 
 module Size : sig
   type 'a s = private
