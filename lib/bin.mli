@@ -101,12 +101,23 @@ module Staged : sig
   val unstage : 'a t -> 'a
 end
 
+(** {2 Positions.}
+
+    Two parameters [_ Off.t] and [Len.t] are said to designate a valid range of
+    a buffer. [_ Off.t] is a non-negative number which can be relative to an
+    anchor or absolute. [Len.t] is also a non-negative number. From them and a
+    byte sequence, we can access each of the [Len.t] bytes via its index
+    [_ Off.t] in the sequence. Indexes start at [_ Off.t]. If it's an absolute
+    offset ([abs Off.t]), it start at [0] (see {!val:Off.zero}). If it's an
+    relative offset, you should use {!val:Off.at} to manipulate then an absolute
+    offset. *)
 module Off : sig
   type 'w t = private int
   type abs
   type rel
 
   val zero : 'w t
+  val at : abs t -> rel t -> abs t
 end
 
 module Len : sig
@@ -114,7 +125,10 @@ module Len : sig
 end
 
 type pos = Off.abs Off.t ref
+(** A type to describe a position which falls within the range of a sequence. *)
+
 type 'a t
+(** A type to describe a binary format. *)
 
 (** {1:primitives Primitives.} *)
 
@@ -337,18 +351,15 @@ val encode_bstr : 'a t -> ('a -> Bstr.t -> pos -> unit) Staged.t
 (** {2:size Size of representations.} *)
 
 module Size : sig
-  type 'a s = private
-    | Static of int
-    | Dynamic of ('a -> int)
-    | Unknown
-        (** A value representing information known about the length in bytes of
-            encodings produced by a particular binary codec:
-            - [Static n]: all encodings produced by this codec have length [n];
-            - [Dynamic fn]: the length of binary encodings is dependent on the
-              specific value, but may be efficiently computed at run-time via
-              the function [fn];
-            - [Unknown]: this codec may produce encodings that cannot be
-              efficiently pre-computed. *)
+  (** A value representing information known about the length in bytes of
+      encodings produced by a particular binary codec:
+      - [Static n]: all encodings produced by this codec have length [n];
+      - [Dynamic fn]: the length of binary encodings is dependent on the
+        specific value, but may be efficiently computed at run-time via the
+        function [fn];
+      - [Unknown]: this codec may produce encodings that cannot be efficiently
+        pre-computed. *)
+  type 'a s = private Static of int | Dynamic of ('a -> int) | Unknown
 
   type 'a t
 end
