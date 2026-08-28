@@ -35,6 +35,8 @@ type _ static_operation =
   | Is_swap : { q: rel; lsh: int; rsh: int } -> int static_operation
   | I32raw : { q: rel; sh: int } -> int32 static_operation
   | I32swap : { q: rel; sh: int } -> int32 static_operation
+  | I64raw : rel -> int64 static_operation
+  | I64swap : rel -> int64 static_operation
   | Ofun : 'a sread -> 'a static_operation
 
 type ('a, 'b) sreaders =
@@ -62,6 +64,8 @@ let[@inline] static_exec : type a. a static_operation -> S.t -> abs -> a =
   | I32swap { q; sh } ->
       let w = S.swap64 (S.unsafe_get_int64_ne buf (Off.at offset q :> int)) in
       Int64.to_int32 (Int64.shift_right_logical w sh)
+  | I64raw q -> S.unsafe_get_int64_ne buf (Off.at offset q :> int)
+  | I64swap q -> S.swap64 (S.unsafe_get_int64_ne buf (Off.at offset q :> int))
   | Ofun fn -> fn buf offset
 
 [@@@ocamlformat "disable"]
@@ -356,6 +360,13 @@ let narrow32 ~(win : Len.t) ~delta:(q : rel) ~big ~fallback =
     let q = Off.unsafe q in
     if big <> Sys.big_endian then I32swap { q; sh } else I32raw { q; sh }
 
+let narrow64 ~(win : Len.t) ~(delta : rel) ~big ~fallback =
+  let win = (win :> int) and delta = (delta :> int) in
+  if win < 8 || delta + 8 > win then Ofun fallback
+  else
+    let q = Off.unsafe delta in
+    if big <> Sys.big_endian then I64swap q else I64raw q
+
 let rec static_reader_at : type a.
     win:Len.t -> rel -> a t -> a static_operation option =
  fun ~win delta t ->
@@ -421,6 +432,7 @@ and static_primary_at : type a.
     Some (narrow ~win ~delta ~w ~signed ~big ~fallback:fn)
   in
   let narrow32 ~big fn = Some (narrow32 ~win ~delta ~big ~fallback:fn) in
+  let narrow64 ~big fn = Some (narrow64 ~win ~delta ~big ~fallback:fn) in
   let big_endian = function
     | Big_endian -> true
     | Little_endian -> false
@@ -464,21 +476,15 @@ and static_primary_at : type a.
       in
       let fn buf offset = get buf (Off.at offset delta :> int) in
       narrow32 ~big:(big_endian endian) fn
-  | Int64 Big_endian ->
-      let fn buf offset =
-        S.unsafe_get_int64_be buf (Off.at offset delta :> int)
+  | Int64 endian ->
+      let get =
+        match endian with
+        | Big_endian -> S.unsafe_get_int64_be
+        | Little_endian -> S.unsafe_get_int64_le
+        | Native_endian -> S.unsafe_get_int64_ne
       in
-      Some (Ofun fn)
-  | Int64 Little_endian ->
-      let fn buf offset =
-        S.unsafe_get_int64_le buf (Off.at offset delta :> int)
-      in
-      Some (Ofun fn)
-  | Int64 Native_endian ->
-      let fn buf offset =
-        S.unsafe_get_int64_ne buf (Off.at offset delta :> int)
-      in
-      Some (Ofun fn)
+      let fn buf offset = get buf (Off.at offset delta :> int) in
+      narrow64 ~big:(big_endian endian) fn
   | Const v -> Some (Ofun (fun _ _ -> v))
   | Bytes (Fixed n) ->
       let fn buf offset =
