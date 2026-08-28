@@ -139,6 +139,7 @@ type _ t =
   | Variant : 'a variant -> 'a t
   | Map : ('a, 'b) map -> 'b t
   | Seq : ('a, 'b) seq -> 'b t
+  | Bind : ('a, 'b) bind -> 'b t
 
 and _ primary =
   | Char : char primary
@@ -197,6 +198,7 @@ and 'a variant = {
 }
 
 and ('a, 'b) map = { x: 'a t; f: 'a -> 'b; g: 'b -> 'a; mwit: 'b Witness.t }
+and ('a, 'b) bind = { bx: 'a t; bf: 'a -> 'b t; bg: 'b -> 'a }
 and _ a_field = Field : ('a, 'b) field -> 'a a_field
 
 let fields r =

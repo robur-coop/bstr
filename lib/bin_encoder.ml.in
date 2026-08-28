@@ -225,6 +225,12 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
     | Record r -> go_record r
     | Variant v -> go_variant v
     | Seq s -> go_seq s
+    | Bind { bx; bf; bg } ->
+        let wr = go bx in
+        fun v buf limit pos ->
+          let a = bg v in
+          wr a buf limit pos;
+          writer (bf a) v buf limit pos
   and go_record : type a. a record -> a -> S.t -> abs -> pos -> unit =
    fun r ->
     let rname = if r.rname = "" then "record" else r.rname in

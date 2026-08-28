@@ -524,7 +524,7 @@ let static_record_plan : type a. a record -> a sread option =
   | Some n -> static_record_at ~win:n Off.zero r
   | None -> None
 
-let reader : type a. a t -> S.t -> abs -> pos -> a =
+let rec reader : type a. a t -> S.t -> abs -> pos -> a =
  fun root ->
   let rec go : type a. a t -> S.t -> abs -> pos -> a =
    fun t ->
@@ -536,6 +536,11 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
     | Map { x; f; _ } ->
         let rd = go x in
         fun buf limit pos -> f (rd buf limit pos)
+    | Bind { bx; bf; _ } ->
+        let rd = go bx in
+        fun buf limit pos ->
+          let a = rd buf limit pos in
+          reader (bf a) buf limit pos
   and go_record : type a. a record -> S.t -> abs -> pos -> a =
    fun r ->
     let rname = if r.rname = "" then "record" else r.rname in

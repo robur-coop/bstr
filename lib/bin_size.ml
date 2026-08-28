@@ -53,6 +53,22 @@ let rec make : type a. a Bin_type.t -> a t = function
       List.fold_left fn (static 0) (Bin_type.record_fields r)
   | Variant v -> variant v
   | Map { x; g; _ } -> using g (make x)
+  | Bind { bx; bf; bg } ->
+      let sx = (make bx).of_value in
+      dynamic @@ fun v ->
+      let a = bg v in
+      let head =
+        match sx with Static n -> n | Dynamic fn -> fn a | Unknown -> 0
+        (* raise? *)
+      in
+      let tail =
+        match (make (bf a)).of_value with
+        | Static n -> n
+        | Dynamic fn -> fn v
+        | Unknown -> 0
+        (* raise? *)
+      in
+      head + tail
   | Seq s -> seq s
 
 and seq : type a b. (a, b) Bin_type.seq -> b t =

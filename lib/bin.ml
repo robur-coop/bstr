@@ -166,3 +166,6 @@ let ( |~ ) = app
 (* map *)
 
 let map x f g = Map { x; f; g; mwit= Witness.make () }
+let ( let+ ) (x, f, g) fn = fn (map x f g)
+let bind x f g = Bind { bx= x; bf= f; bg= g }
+let ( let* ) (x, f, g) fn = fn (bind x f g)

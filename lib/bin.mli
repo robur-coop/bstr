@@ -226,6 +226,13 @@ val map : 'b t -> ('b -> 'a) -> ('a -> 'b) -> 'a t
 (** This combinator allows defining a representative of one type in terms of
     another by supplying coercions between them. *)
 
+val bind : 'a t -> ('a -> 'b t) -> ('b -> 'a) -> 'b t
+(** This combinator allows defining a representative of one type in tems of
+    the result of another by supplying coercions between them. *)
+
+val ( let+ ) : ('a t * ('a -> 'b) * ('b -> 'a)) -> ('b t -> 'c) -> 'c
+val ( let* ) : ('a t * ('a -> 'b t) * ('b -> 'a)) -> ('b t -> 'c) -> 'c
+
 (* {2:records Records.}
 
    {[
