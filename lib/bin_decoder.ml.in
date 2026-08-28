@@ -43,6 +43,10 @@ type ('a, 'b) sreaders =
   | S0 : ('a, 'a) sreaders
   | S1 : 'b static_operation * ('a, 'c) sreaders -> ('a, 'b -> 'c) sreaders
 
+type ('a, 'b) wreaders =
+  | W0 : ('a, 'a) wreaders
+  | W1 : (int -> 'b) * ('a, 'c) wreaders -> ('a, 'b -> 'c) wreaders
+
 let[@inline] static_exec : type a. a static_operation -> S.t -> abs -> a =
  fun operation buf offset ->
   match operation with
@@ -312,6 +316,35 @@ and static_slow : type a b. b -> (a, b) sreaders -> S.t -> abs -> a
     | S1 (r, rest) ->
       let v = static_exec r b o in
       static_slow (ctor v) rest b o
+
+let rec wapply : type a b. b -> (a, b) wreaders -> int -> a =
+  fun ctor rs ->
+    match rs with
+    | W0 ->
+      fun _ -> ctor
+    | W1 (r1, W0) ->
+      fun w -> ctor (r1 w)
+    | W1 (r1, W1 (r2, W0)) ->
+      fun w -> ctor (r1 w) (r2 w)
+    | W1 (r1, W1 (r2, W1 (r3, W0))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w)
+    | W1 (r1, W1 (r2, W1 (r3, W1 (r4, W0)))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w) (r4 w)
+    | W1 (r1, W1 (r2, W1 (r3, W1 (r4, W1 (r5, W0))))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w) (r4 w) (r5 w)
+    | W1 (r1, W1 (r2, W1 (r3, W1 (r4, W1 (r5, W1 (r6, W0)))))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w) (r4 w) (r5 w) (r6 w)
+    | W1 (r1, W1 (r2, W1 (r3, W1 (r4, W1 (r5, W1 (r6, W1 (r7, W0))))))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w) (r4 w) (r5 w) (r6 w) (r7 w)
+    | W1 (r1, W1 (r2, W1 (r3, W1 (r4, W1 (r5, W1 (r6, W1 (r7, W1 (r8, W0)))))))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w) (r4 w) (r5 w) (r6 w) (r7 w) (r8 w)
+    | rs -> fun w -> wapply_slow ctor rs w
+
+and wapply_slow : type a b. b -> (a, b) wreaders -> int -> a =
+  fun ctor rs w ->
+    match rs with
+    | W0 -> ctor
+    | W1 (r, rest) -> wapply_slow (ctor (r w)) rest w
 [@@@ocamlformat "enable"]
 
 let read_varint buf limit pos =
@@ -328,6 +361,59 @@ let read_varint buf limit pos =
       Bin_error.out_of_range ~offset:start ~kind:"varint" ~value:"overflow"
   done;
   !res
+
+let bits_reader_at : type a. rel -> a bits -> a sread =
+ fun delta b ->
+  let extract =
+    match b.bfields with
+    | BFields (fs, ctor) ->
+        let layout = bits_layout b in
+        let idx = ref 0 in
+        let rec build : type x y. (x, y) bit_fields -> (x, y) wreaders =
+          function
+          | BF0 -> W0
+          | BF1 (field, rest) ->
+              let shift, mask = layout.(!idx) in
+              incr idx;
+              let this : type z. z bit_kind -> int -> z = function
+                | Bint -> fun w -> (w lsr shift) land mask
+                | Bbool -> fun w -> (w lsr shift) land mask <> 0
+              in
+              let this = this field.bfkind in
+              W1 (this, build rest)
+        in
+        wapply ctor (build fs)
+  in
+  match b.bbase with
+  | B8 ->
+      fun buf offset ->
+        extract (S.unsafe_get_uint8 buf (Off.at offset delta :> int))
+  | B16 Big_endian ->
+      fun buf offset ->
+        extract (S.unsafe_get_uint16_be buf (Off.at offset delta :> int))
+  | B16 Little_endian ->
+      fun buf offset ->
+        extract (S.unsafe_get_uint16_le buf (Off.at offset delta :> int))
+  | B16 Native_endian ->
+      fun buf offset ->
+        extract (S.unsafe_get_uint16_ne buf (Off.at offset delta :> int))
+  | B32 Big_endian ->
+      fun buf offset ->
+        extract
+          (Int32.to_int
+             (S.unsafe_get_int32_be buf (Off.at offset delta :> int)))
+  | B32 Little_endian ->
+      fun buf offset ->
+        extract
+          (Int32.to_int
+             (S.unsafe_get_int32_le buf (Off.at offset delta :> int)))
+  | B32 Native_endian ->
+      fun buf offset ->
+        extract
+          (Int32.to_int
+             (S.unsafe_get_int32_ne buf (Off.at offset delta :> int)))
+
+let bits_reader : type a. a bits -> a sread = fun b -> bits_reader_at Off.zero b
 
 let narrow ~(win : Len.t) ~(delta : rel) ~(w : Len.t) ~signed ~big ~fallback =
   let win = Len.to_int win and delta = Off.to_int delta and w = Len.to_int w in
@@ -391,6 +477,7 @@ let rec static_reader_at : type a.
           Some (Ofun (static_seq ~delta ~n ~w operation skind))
       | _ -> None
     end
+  | Bits b -> Some (Ofun (bits_reader_at delta b))
   | _ -> None
 
 and static_seq : type a b.
@@ -547,6 +634,19 @@ let rec reader : type a. a t -> S.t -> abs -> pos -> a =
         fun buf limit pos ->
           let a = rd buf limit pos in
           reader (bf a) buf limit pos
+    | Bits b ->
+        let rd = bits_reader b in
+        let w =
+          match b.bbase with
+          | B8 -> Len.unsafe 1
+          | B16 _ -> Len.unsafe 2
+          | B32 _ -> Len.unsafe 4
+        in
+        fun buf limit pos ->
+          let offset = !pos in
+          Bin_error.need_bytes ~limit ~offset ~need:w;
+          (pos := Off.(offset +> w));
+          rd buf offset
   and go_record : type a. a record -> S.t -> abs -> pos -> a =
    fun r ->
     let rname = if r.rname = "" then "record" else r.rname in

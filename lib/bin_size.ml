@@ -53,6 +53,9 @@ let rec make : type a. a Bin_type.t -> a t = function
       List.fold_left fn (static 0) (Bin_type.record_fields r)
   | Variant v -> variant v
   | Map { x; g; _ } -> using g (make x)
+  | Bits { bbase= B8; _ } -> static 1
+  | Bits { bbase= B16 _; _ } -> static 2
+  | Bits { bbase= B32 _; _ } -> static 4
   | Bind { bx; bf; bg } ->
       let sx = (make bx).of_value in
       dynamic @@ fun v ->

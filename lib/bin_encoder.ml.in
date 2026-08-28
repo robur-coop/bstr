@@ -1,5 +1,7 @@
 [@@@warning "-unused-rec-flag"]
 
+let strf fmt = Format.asprintf fmt
+
 open Bin_type
 
 type abs = Off.abs Off.t
@@ -134,6 +136,95 @@ let write_varint value buf limit pos =
 type 'a fwrite = 'a -> S.t -> int -> int -> pos -> unit
 type 'a swrite = 'a -> S.t -> abs -> unit
 
+let bits_cells : type a. a bits -> (a -> int) array =
+ fun b ->
+  let layout = bits_layout b in
+  let idx = ref 0 in
+  let rec build : type x y. (x, y) bit_fields -> (x -> int) list = function
+    | BF0 -> []
+    | BF1 (field, rest) ->
+        let shift, mask = layout.(!idx) in
+        let name = field.bfname and width = field.bfwidth in
+        let this : x -> int =
+          match field.bfkind with
+          | Bbool -> fun v -> if field.bfget v then 1 lsl shift else 0
+          | Bint ->
+              fun v ->
+                let x = field.bfget v in
+                if x land mask <> x then
+                  Bin_error.out_of_range ~offset:Off.zero
+                    ~kind:(strf "%d-bit field %s" width name)
+                    ~value:(string_of_int x);
+                x lsl shift
+        in
+        this :: build rest
+  in
+  let (BFields (fs, _)) = b.bfields in
+  Array.of_list (build fs)
+
+let bits_writer_at : type a. rel -> a bits -> a swrite =
+ fun delta b ->
+  let cells = bits_cells b in
+  let word : a -> int =
+    match Array.length cells with
+    | 0 -> fun _ -> 0
+    | 1 ->
+        let c0 = cells.(0) in
+        fun v -> c0 v
+    | 2 ->
+        let c0 = cells.(0) in
+        let c1 = cells.(1) in
+        fun v -> c0 v lor c1 v
+    | 3 ->
+        let c0 = cells.(0) in
+        let c1 = cells.(1) in
+        let c2 = cells.(2) in
+        fun v -> c0 v lor c1 v lor c2 v
+    | 4 ->
+        let c0 = cells.(0) in
+        let c1 = cells.(1) in
+        let c2 = cells.(2) in
+        let c3 = cells.(3) in
+        fun v -> c0 v lor c1 v lor c2 v lor c3 v
+    | n ->
+        fun v ->
+          let w = ref 0 in
+          for idx = 0 to n - 1 do
+            w := !w lor (Array.unsafe_get cells idx) v
+          done;
+          !w
+  in
+  match b.bbase with
+  | B8 ->
+      fun v buf off -> S.unsafe_set_uint8 buf (Off.at off delta :> int) (word v)
+  | B16 Big_endian ->
+      fun v buf off ->
+        S.unsafe_set_uint16_be buf (Off.at off delta :> int) (word v)
+  | B16 Little_endian ->
+      fun v buf off ->
+        S.unsafe_set_uint16_le buf (Off.at off delta :> int) (word v)
+  | B16 Native_endian ->
+      fun v buf off ->
+        S.unsafe_set_uint16_ne buf (Off.at off delta :> int) (word v)
+  | B32 Big_endian ->
+      fun v buf off ->
+        S.unsafe_set_int32_be buf
+          (Off.at off delta :> int)
+          (Int32.of_int (word v))
+  | B32 Little_endian ->
+      fun v buf off ->
+        S.unsafe_set_int32_le buf
+          (Off.at off delta :> int)
+          (Int32.of_int (word v))
+  | B32 Native_endian ->
+      fun v buf off ->
+        S.unsafe_set_int32_ne buf
+          (Off.at off delta :> int)
+          (Int32.of_int (word v))
+
+let bits_writer : type a. a bits -> a swrite =
+ fun b -> bits_writer_at Off.zero b
+
 let rec static_writer_for : type a b. rel -> (a -> b) -> b t -> a swrite option
     =
  fun delta get t ->
@@ -145,6 +236,9 @@ let rec static_writer_for : type a b. rel -> (a -> b) -> b t -> a swrite option
       | Some wr -> Some (fun v buf off -> wr (get v) buf off)
       | None -> None
       end
+  | Bits b ->
+      let wr = bits_writer_at delta b in
+      Some (fun v buf off -> wr (get v) buf off)
   | _ -> None
 
 and static_primary_writer_for : type a b.
@@ -231,6 +325,19 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
           let a = bg v in
           wr a buf limit pos;
           writer (bf a) v buf limit pos
+    | Bits b ->
+        let wr = bits_writer b in
+        let w =
+          match b.bbase with
+          | B8 -> Len.unsafe 1
+          | B16 _ -> Len.unsafe 2
+          | B32 _ -> Len.unsafe 4
+        in
+        fun v buf limit pos ->
+          let offset = !pos in
+          Bin_error.need_bytes ~limit ~offset ~need:w;
+          (pos := Off.(offset +> w));
+          wr v buf offset
   and go_record : type a. a record -> a -> S.t -> abs -> pos -> unit =
    fun r ->
     let rname = if r.rname = "" then "record" else r.rname in

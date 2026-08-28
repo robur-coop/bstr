@@ -132,6 +132,8 @@ let[@inline] have ~limit ~offset = Off.(limit -- offset)
 
 type pos = Off.abs Off.t ref
 type endianness = Big_endian | Little_endian | Native_endian
+type bit_order = Msb_first | Lsb_first
+type bits_base = B8 | B16 of endianness | B32 of endianness
 
 type _ t =
   | Primary : 'a primary -> 'a t
@@ -140,6 +142,7 @@ type _ t =
   | Map : ('a, 'b) map -> 'b t
   | Seq : ('a, 'b) seq -> 'b t
   | Bind : ('a, 'b) bind -> 'b t
+  | Bits : 'a bits -> 'a t
 
 and _ primary =
   | Char : char primary
@@ -201,12 +204,61 @@ and ('a, 'b) map = { x: 'a t; f: 'a -> 'b; g: 'b -> 'a; mwit: 'b Witness.t }
 and ('a, 'b) bind = { bx: 'a t; bf: 'a -> 'b t; bg: 'b -> 'a }
 and _ a_field = Field : ('a, 'b) field -> 'a a_field
 
+and 'a bits = {
+    bname: string
+  ; bbase: bits_base
+  ; border: bit_order
+  ; bfields: 'a bits_and_constr
+}
+
+and 'a bits_and_constr =
+  | BFields : ('a, 'b) bit_fields * 'b -> 'a bits_and_constr
+
+and ('a, 'b) bit_fields =
+  | BF0 : ('a, 'a) bit_fields
+  | BF1 : ('a, 'b) bit_field * ('a, 'c) bit_fields -> ('a, 'b -> 'c) bit_fields
+
+and ('a, 'b) bit_field = {
+    bfname: string
+  ; bfwidth: int
+  ; bfget: 'a -> 'b
+  ; bfkind: 'b bit_kind
+}
+
+and _ bit_kind = Bint : int bit_kind | Bbool : bool bit_kind
+
+type _ a_bit_field = Bit_field : ('a, 'b) bit_field -> 'a a_bit_field
+
 let fields r =
   let rec go : type a b. (a, b) fields -> a a_field list = function
     | F0 -> []
     | F1 (x, r) -> Field x :: go r
   in
   match r.rfields with Fields (f, _) -> go f
+
+let rec a_bit_fields : type a b. (a, b) bit_fields -> a a_bit_field list =
+  function
+  | BF0 -> []
+  | BF1 (x, r) -> Bit_field x :: a_bit_fields r
+
+let bit_fields : type a. a bits -> a a_bit_field list =
+ fun v -> match v.bfields with BFields (fs, _) -> a_bit_fields fs
+
+let shift ~order ~total ~used ~width =
+  match order with Lsb_first -> used | Msb_first -> total - used - width
+[@@inline]
+
+let bits_layout : type a. a bits -> (int * int) array =
+ fun b ->
+  let total = match b.bbase with B8 -> 8 | B16 _ -> 16 | B32 _ -> 32 in
+  let used = ref 0 in
+  let fn (Bit_field field) =
+    let shift = shift ~order:b.border ~total ~used:!used ~width:field.bfwidth in
+    used := !used + field.bfwidth;
+    (shift, (1 lsl field.bfwidth) - 1)
+  in
+  let cells = List.map fn (bit_fields b) in
+  Array.of_list cells
 
 module Fields_folder (Acc : sig
   type ('a, 'b) t
@@ -273,4 +325,19 @@ module Case = struct
     let n = Array.length vcases in
     let rec go i = i >= n || (tag vcases.(i) = i && go (i + 1)) in
     go 0
+end
+
+module Bits_folder (Acc : sig
+  type ('a, 'b) t
+end) =
+struct
+  type 'a t = {
+      nil: ('a, 'a) Acc.t
+    ; cons: 'b 'c. ('a, 'b) bit_field -> ('a, 'c) Acc.t -> ('a, 'b -> 'c) Acc.t
+  }
+
+  let rec fold : type a c. a t -> (a, c) bit_fields -> (a, c) Acc.t =
+   fun folder -> function
+    | BF0 -> folder.nil
+    | BF1 (field, fs) -> folder.cons field (fold folder fs)
 end
