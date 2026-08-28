@@ -4,16 +4,18 @@ let test01 =
   let descr = {text|cstring|text} in
   Test.test ~title:"cstring" ~descr @@ fun () ->
   let buf = Bstr.create 0x7ff in
+  let enc = Bin.Staged.unstage (Bin.encode_bstr Bin.cstring) in
+  let dec = Bin.Staged.unstage (Bin.decode_bstr Bin.cstring) in
   let test str =
-    let pos = ref 0 in
+    let pos = ref Bin.Off.zero in
     let len = String.length str in
-    Bin.encode_bstr Bin.cstring str buf pos;
-    check (!pos == len + 1);
+    enc str buf pos;
+    check ((!pos :> int) == len + 1);
     check (Bstr.get_uint8 buf len == 0);
     check (Bstr.sub_string buf ~off:0 ~len = str);
-    pos := 0;
-    let str' = Bin.decode_bstr Bin.cstring buf pos in
-    check (!pos == len + 1);
+    pos := Bin.Off.zero;
+    let str' = dec buf pos in
+    check ((!pos :> int) == len + 1);
     check (str = str')
   in
   test "foo"; test "bar"
@@ -22,15 +24,17 @@ let test02 =
   let descr = {text|varint|text} in
   Test.test ~title:"varint" ~descr @@ fun () ->
   let buf = Bstr.create 0x7ff in
+  let enc = Bin.Staged.unstage (Bin.encode_bstr Bin.varint) in
+  let dec = Bin.Staged.unstage (Bin.decode_bstr Bin.varint) in
   let test value expected =
-    let pos = ref 0 in
-    Bin.encode_bstr Bin.varint value buf pos;
+    let pos = ref Bin.Off.zero in
+    enc value buf pos;
     let len = String.length expected in
-    check (!pos == len);
+    check ((!pos :> int) == len);
     check (Bstr.sub_string buf ~off:0 ~len = expected);
-    pos := 0;
-    let value' = Bin.decode_bstr Bin.varint buf pos in
-    check (!pos == len);
+    pos := Bin.Off.zero;
+    let value' = dec buf pos in
+    check ((!pos :> int) == len);
     check (value == value')
   in
   test 0 "\000";
@@ -63,15 +67,17 @@ let test03 =
     |+ field neint64 (fun (_, b) -> b)
     |> sealr
   in
+  let enc = Bin.Staged.unstage (Bin.encode_bstr t) in
+  let dec = Bin.Staged.unstage (Bin.decode_bstr t) in
   let test value expected =
-    let pos = ref 0 in
-    Bin.encode_bstr t value buf pos;
+    let pos = ref Bin.Off.zero in
+    enc value buf pos;
     let len = String.length expected in
-    check (!pos == len);
+    check ((!pos :> int) == len);
     check (Bstr.sub_string buf ~off:0 ~len = expected);
-    pos := 0;
-    let value' = Bin.decode_bstr t buf pos in
-    check (!pos = len);
+    pos := Bin.Off.zero;
+    let value' = dec buf pos in
+    check ((!pos :> int) == len);
     check (value = value')
   in
   test (0l, 0L) (String.make 24 '\000');

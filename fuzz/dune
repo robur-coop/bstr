@@ -1,0 +1,9 @@
+(executable
+ (name fuzz)
+ (libraries crowbar bin))
+
+(rule
+ (alias runtest)
+ (package bin)
+ (action
+  (run ./fuzz.exe)))

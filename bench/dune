@@ -85,3 +85,35 @@
   (= %{profile} benchmark))
  (action
   (system "%{bin:bechamel-html} < %{dep:contains.json} > %{targets}")))
+
+(executable
+ (name ipv4)
+ (enabled_if
+  (= %{profile} benchmark))
+ (libraries
+  bstr
+  bin
+  repr
+  data-encoding
+  wire
+  angstrom
+  faraday
+  cstruct
+  bechamel
+  bechamel-js))
+
+(rule
+ (targets ipv4.json)
+ (enabled_if
+  (= %{profile} benchmark))
+ (action
+  (with-stdout-to
+   %{targets}
+   (run ./ipv4.exe))))
+
+(rule
+ (targets ipv4.html)
+ (enabled_if
+  (= %{profile} benchmark))
+ (action
+  (system "%{bin:bechamel-html} < %{dep:ipv4.json} > %{targets}")))

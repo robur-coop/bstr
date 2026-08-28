@@ -68,7 +68,67 @@
     go directly to OCaml values, which is generally more pleasant to manipulate
     with OCaml than to make C stubs. *)
 
+(** For performance reasons, it is sometimes preferable to handle functions
+    specialising in one or two arguments rather than applying all the function’s
+    arguments (and repeating internal calculations whenever that first or second
+    argument appears). The Staged module allows you to define a boundary between
+    what should be ‘pre-applied’ and what should be fully applied afterwards.
+
+    {[
+    let fn x =
+      let x = x + 1 in
+      Staged.stage (fun y -> x + y)
+
+    let g = fn 20
+    let () = print_int ((Staged.unstage g) 21)
+    ]}
+
+    In the example above, we prepare the function [g] so that the calculation
+    [x+1] is {i already} done and no longer needs to be performed. Furthermore,
+    the application of [g] will only involve the calculation [x+y].
+
+    In the case of [Bin], it may be useful to prepare how a format is to be
+    decoded or encoded. Furthermore, {!val:decode} and {!val:encode_bstr} return
+    a [Staged.t] value in order to force these functions to specialise via the
+    description of a binary format.
+
+    In this way, the decoder/encoder for this format is properly specialised and
+    optimised. This is the main reason for the existence of this module. *)
+module Staged : sig
+  type +'a t
+
+  val stage : 'a -> 'a t
+  val unstage : 'a t -> 'a
+end
+
+(** {2 Positions.}
+
+    Two parameters [_ Off.t] and [Len.t] are said to designate a valid range of
+    a buffer. [_ Off.t] is a non-negative number which can be relative to an
+    anchor or absolute. [Len.t] is also a non-negative number. From them and a
+    byte sequence, we can access each of the [Len.t] bytes via its index
+    [_ Off.t] in the sequence. Indexes start at [_ Off.t]. If it's an absolute
+    offset ([abs Off.t]), it start at [0] (see {!val:Off.zero}). If it's an
+    relative offset, you should use {!val:Off.at} to manipulate then an absolute
+    offset. *)
+module Off : sig
+  type 'w t = private int
+  type abs
+  type rel
+
+  val zero : 'w t
+  val at : abs t -> rel t -> abs t
+end
+
+module Len : sig
+  type t = private int
+end
+
+type pos = Off.abs Off.t ref
+(** A type to describe a position which falls within the range of a sequence. *)
+
 type 'a t
+(** A type to describe a binary format. *)
 
 (** {1:primitives Primitives.} *)
 
@@ -118,22 +178,49 @@ val neint64 : int64 t
 (** [neint64] is a representation of native-endian 64-bit integers. *)
 
 val varint : int t
+(** [varint] is a representation of an integer value using a sequence of bytes.
+    The number of bytes that is needed depends on the value being represented,
+    with larger magnitudes using more bytes than smaller ones. *)
 
-val bytes : int -> string t
+type len
+(** [len] is a type that represents a size (fixed or dynamic) for certain
+    primitives such as {!val:bytes} or {!val:bstr}. *)
+
+val fixed : int -> len
+(** [fixed len] is a fixed length of [len] bytes. *)
+
+val delim : char -> len
+(** [delim chr] is a length until we reach the [chr] byte. *)
+
+val prefix : int t -> len
+(** [prefix t] is a representation of a value which size is specified by a
+    {i header}/prefix [t]. *)
+
+val rest : len
+(** [rest] is the rest of the payload. *)
+
+val bytes : len -> string t
 (** [bytes n] is a representation of a bytes sequence of [n] byte(s). *)
 
-val bstr : int -> Bstr.t t
+val bstr : len -> Bstr.t t
 (** [bstr n] is a representation of a bigstring of [n] byte(s). *)
 
 val cstring : string t
+(** [cstring] is [bytes (delim '\000')]. *)
+
 val until : char -> string t
+(** [until chr] is [bytes (delim chr)]. *)
 
 val const : 'a -> 'a t
 (** [const v] is [v] without a serialization mechanism. *)
 
-val seq : len:int -> 'a t -> 'a array t
-(** [seq ~len v] is a representation of fixed-length arrays of values of type
-    [v]. *)
+val seq : len -> 'a t -> 'a array t
+(** [seq len t] is a consecutive sequence of [len] elements represented by [t].
+    It returns an array. *)
+
+val list : len -> 'a t -> 'a list t
+(** [list len t] is a consecutive sequence of [len] elements represented by [t].
+    It returns an list. *)
 
 val map : 'b t -> ('b -> 'a) -> ('a -> 'b) -> 'a t
 (** This combinator allows defining a representative of one type in terms of
@@ -165,7 +252,7 @@ type ('a, 'b, 'c) open_record
     {!val:(|+)} operator. An open record initially stisfies ['c = 'b] and can be
     {{!val:sealr} sealed} once ['c = 'a]. *)
 
-val record : 'b -> ('a, 'b, 'b) open_record
+val record : ?name:string -> 'b -> ('a, 'b, 'b) open_record
 (** [record f] is an incomplete representation of the record of type ['a] with
     constructor [f]. To complete the representation, add fields with {!val:(|+)}
     and then seal the record with {!val:sealr}. *)
@@ -174,7 +261,7 @@ type ('a, 'b) field
 (** The type for fields holding values of type ['b] and belonging to a record of
     type ['a]. *)
 
-val field : 'a t -> ('b -> 'a) -> ('b, 'a) field
+val field : ?name:string -> 'a t -> ('b -> 'a) -> ('b, 'a) field
 (** [field n t g] is the representation of the field called [n] of type [t] with
     getter [g]. For instance:
 
@@ -209,7 +296,7 @@ type ('a, 'b, 'c) open_variant
     using the {!val:(|~)} operator. An open variant initially satisfies
     ['c = 'b] and can be {{!val:sealv} sealed} once ['c = 'a]. *)
 
-val variant : 'b -> ('a, 'b, 'b) open_variant
+val variant : ?name:string -> 'b -> ('a, 'b, 'b) open_variant
 (** [variant n p] is an incomplete representation of the variant type called [n]
     of type ['a] using [p] to deconstruct values. To complete the
     representation, add cases with {!val:(|~)} and then seal the variant with
@@ -222,7 +309,7 @@ type ('a, 'b) case
 type 'a case_p
 (** The type for representing patterns for a variant of type ['a]. *)
 
-val case0 : 'a -> ('a, 'a case_p) case
+val case0 : ?name:string -> ?tag:int -> 'a -> ('a, 'a case_p) case
 (** [case0 v] is a representation of a variant constructor [v] with no
     arguments. For instance:
 
@@ -232,7 +319,8 @@ val case0 : 'a -> ('a, 'a case_p) case
     let foo = case0 Foo
     ]} *)
 
-val case1 : 'b t -> ('b -> 'a) -> ('a, 'b -> 'a case_p) case
+val case1 :
+  ?name:string -> ?tag:int -> 'b t -> ('b -> 'a) -> ('a, 'b -> 'a case_p) case
 (** [case1 n t c] is a representation of a variant constructor [c] with an
     argument of type [t]. For instances:
 
@@ -246,50 +334,36 @@ val ( |~ ) :
   ('a, 'b, 'c -> 'd) open_variant -> ('a, 'c) case -> ('a, 'b, 'd) open_variant
 (** [v |~ c] is the open variant [v] augmented with the case [c]. *)
 
-val sealv : ('a, 'b, 'a -> 'a case_p) open_variant -> 'a t
+val sealv : ?tag:int t -> ('a, 'b, 'a -> 'a case_p) open_variant -> 'a t
 (** [sealv v] seals the open variant [v]. *)
 
 (** {2:decoder Decoder.} *)
 
-val decode_bstr : 'a t -> Bstr.t -> int ref -> 'a
+val decode_bstr : 'a t -> (Bstr.t -> pos -> 'a) Staged.t
 (** [decode_bstr repr] is the binary decoder for values of type [repr]. *)
 
-val decode : 'a t -> string -> int ref -> 'a
+val decode : 'a t -> (string -> pos -> 'a) Staged.t
 
 (** {2:encoder Encoder.} *)
 
-val encode_bstr : 'a t -> 'a -> Bstr.t -> int ref -> unit
-val to_string : 'a t -> 'a -> string
+val encode_bstr : 'a t -> ('a -> Bstr.t -> pos -> unit) Staged.t
+
+(** {2:size Size of representations.} *)
 
 module Size : sig
-  type -'a size_of
-  (** The type for size function related to binary encoder/decoder. *)
+  (** A value representing information known about the length in bytes of
+      encodings produced by a particular binary codec:
+      - [Static n]: all encodings produced by this codec have length [n];
+      - [Dynamic fn]: the length of binary encodings is dependent on the
+        specific value, but may be efficiently computed at run-time via the
+        function [fn];
+      - [Unknown]: this codec may produce encodings that cannot be efficiently
+        pre-computed. *)
+  type 'a s = private Static of int | Dynamic of ('a -> int) | Unknown
 
-  val size_of : 'a t -> 'a size_of
-
-  type 'a t = private
-    | Static of int
-    | Dynamic of 'a
-    | Unknown
-        (** A value representing information known about the length in bytes of
-            encodings produced by a particular binary codec:
-            - [Static n]: all encodings produced by this codec have length [n];
-            - [Dynamic fn]: the length of binary encodings is dependent on the
-              specific value, but may be efficiently computed at run-time via
-              the function [fn];
-            - [Unknown]: this codec may produce encodings that cannot be
-              efficiently pre-computed. *)
-
-  val of_encoding : 'a size_of -> (Bstr.t -> int -> int) t
-  val of_value : 'a size_of -> ('a -> int) t
+  type 'a t
 end
 
 val size_of_value : 'a t -> 'a -> int option
 (** [size_of_value encoding value] attempts to calculate the number of bytes
     needed to encode the given [value] according to the given encoding. *)
-
-val size_of_bstr : ?off:int -> 'a t -> Bstr.t -> int option
-(** [size_of_encoding ?off encoding bstr] attempts to calculate the number of
-    bytes required to decode a value according to the given [encoding] and
-    according to what can be decoded in the given byte sequence [bstr] (at the
-    given offset [off], defaults to [0]). *)
