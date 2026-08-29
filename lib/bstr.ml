@@ -493,6 +493,19 @@ let to_string bstr =
   if length bstr <= 0 then "" else unsafe_sub_string bstr 0 (length bstr)
 
 let is_empty bstr = length bstr == 0
+let hex_digits = "0123456789abcdef"
+
+let hex bstr =
+  let len = length bstr in
+  let res = Bytes.create (len * 2) in
+  for idx = 0 to len - 1 do
+    let code = unsafe_get_uint8 bstr idx in
+    Bytes.unsafe_set res (idx * 2) (String.unsafe_get hex_digits (code lsr 4));
+    Bytes.unsafe_set res
+      ((idx * 2) + 1)
+      (String.unsafe_get hex_digits (code land 0x0f))
+  done;
+  Bytes.unsafe_to_string res
 
 let is_prefix ~affix bstr =
   let len_affix = String.length affix in
@@ -575,6 +588,14 @@ let for_all sat bstr =
     true
   with Break -> false
 
+let exists sat bstr =
+  try
+    for idx = 0 to length bstr - 1 do
+      if sat (unsafe_get bstr idx) then raise_notrace Break
+    done;
+    false
+  with Break -> true
+
 let contains bstr ?(off = 0) ?len chr =
   let len = match len with Some len -> len | None -> length bstr - off in
   memchr bstr ~off ~len chr != -1
@@ -590,6 +611,13 @@ let compare a b =
   else unsafe_memcmp a 0 b 0 len_a
 
 let equal a b = compare a b == 0
+
+let hash bstr =
+  let res = ref 5381 in
+  for idx = 0 to length bstr - 1 do
+    res := (!res lsl 5) + !res + unsafe_get_uint8 bstr idx
+  done;
+  !res land max_int
 
 let constant_equal ~len a b =
   let len1 = len asr 1 in
@@ -859,6 +887,8 @@ let concat sep = function
       in
       List.iter fn lst; res
 
+let append a b = concat "" [ a; b ]
+
 let ( ++ ) a b =
   let c = a + b in
   match (a < 0, b < 0, c < 0) with
@@ -877,6 +907,64 @@ let iter fn t =
   for i = 0 to length t - 1 do
     fn (unsafe_get t i)
   done
+
+let iteri fn t =
+  for i = 0 to length t - 1 do
+    fn i (unsafe_get t i)
+  done
+
+let map fn t =
+  let len = length t in
+  let res = create len in
+  for i = 0 to len - 1 do
+    unsafe_set res i (fn (unsafe_get t i))
+  done;
+  res
+
+let mapi fn t =
+  let len = length t in
+  let res = create len in
+  for i = 0 to len - 1 do
+    unsafe_set res i (fn i (unsafe_get t i))
+  done;
+  res
+
+let fold_left fn acc t =
+  let acc = ref acc in
+  for i = 0 to length t - 1 do
+    acc := fn !acc (unsafe_get t i)
+  done;
+  !acc
+
+let fold_right fn t acc =
+  let acc = ref acc in
+  for i = length t - 1 downto 0 do
+    acc := fn (unsafe_get t i) !acc
+  done;
+  !acc
+
+let filter sat t =
+  let len = length t in
+  let res = create len in
+  let pos = ref 0 in
+  for i = 0 to len - 1 do
+    let chr = unsafe_get t i in
+    if sat chr then begin
+      unsafe_set res !pos chr; incr pos
+    end
+  done;
+  unsafe_sub res 0 !pos
+
+let filter_map fn t =
+  let len = length t in
+  let res = create len in
+  let pos = ref 0 in
+  for i = 0 to len - 1 do
+    match fn (unsafe_get t i) with
+    | Some chr -> unsafe_set res !pos chr; incr pos
+    | None -> ()
+  done;
+  unsafe_sub res 0 !pos
 
 let to_seq bstr =
   let rec go idx () =
