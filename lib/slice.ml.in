@@ -14,6 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  *)
 
+type buf = S.t
 type t = S.t Slice.t
 
 external ( < ) : 'a -> 'a -> bool = "%lessthan"
@@ -36,80 +37,81 @@ let make ?(off = 0) ?len buf =
     invalid_arg "Slice.make";
   Slice.unsafe_make ~off ~len buf
 
-let empty = unsafe_make ~off:0 ~len:0 S.empty
+let empty = Slice.unsafe_make ~off:0 ~len:0 S.empty
 let length { len; _ } = len
-let get { off; buf; _ } idx = S.get buf (off + idx)
-let get_int8 { off; buf; _ } idx = S.get_int8 buf (off + idx)
-let get_uint8 { off; buf; _ } idx = S.get_uint8 buf (off + idx)
-let get_uint16_ne { off; buf; _ } idx = S.get_uint16_ne buf (off + idx)
-let get_uint16_le { off; buf; _ } idx = S.get_uint16_le buf (off + idx)
-let get_uint16_be { off; buf; _ } idx = S.get_uint16_be buf (off + idx)
-let get_int16_ne { off; buf; _ } idx = S.get_int16_ne buf (off + idx)
-let get_int16_le { off; buf; _ } idx = S.get_int16_ne buf (off + idx)
-let get_int16_be { off; buf; _ } idx = S.get_int16_be buf (off + idx)
-let get_int32_ne { off; buf; _ } idx = S.get_int32_ne buf (off + idx)
-let get_int32_le { off; buf; _ } idx = S.get_int32_le buf (off + idx)
-let get_int32_be { off; buf; _ } idx = S.get_int32_be buf (off + idx)
-let get_int64_ne { off; buf; _ } idx = S.get_int64_ne buf (off + idx)
-let get_int64_le { off; buf; _ } idx = S.get_int64_le buf (off + idx)
-let get_int64_be { off; buf; _ } idx = S.get_int64_be buf (off + idx)
-let set { off; buf; _ } idx v = S.set buf (off + idx) v
-let set_int8 { off; buf; _ } idx v = S.set_int8 buf (off + idx) v
-let set_uint8 { off; buf; _ } idx v = S.set_uint8 buf (off + idx) v
-let set_uint16_ne { off; buf; _ } idx v = S.set_uint16_ne buf (off + idx) v
-let set_uint16_le { off; buf; _ } idx v = S.set_uint16_le buf (off + idx) v
-let set_uint16_be { off; buf; _ } idx v = S.set_uint16_be buf (off + idx) v
-let set_int16_ne { off; buf; _ } idx v = S.set_int16_ne buf (off + idx) v
-let set_int16_le { off; buf; _ } idx v = S.set_int16_ne buf (off + idx) v
-let set_int16_be { off; buf; _ } idx v = S.set_int16_be buf (off + idx) v
-let set_int32_ne { off; buf; _ } idx v = S.set_int32_ne buf (off + idx) v
-let set_int32_le { off; buf; _ } idx v = S.set_int32_le buf (off + idx) v
-let set_int32_be { off; buf; _ } idx v = S.set_int32_be buf (off + idx) v
-let set_int64_ne { off; buf; _ } idx v = S.set_int64_ne buf (off + idx) v
-let set_int64_le { off; buf; _ } idx v = S.set_int64_le buf (off + idx) v
-let set_int64_be { off; buf; _ } idx v = S.set_int64_be buf (off + idx) v
+
+(* NOTE(dinosaure): these functions check the bounds of the slice(s) and then
+   use the {b unsafe} primitive of the underlying byte sequence. Letting
+   [S.blit_*] do its own (redundant) bound checking costs a second stack frame
+   and ~40 extra instructions per call. [dst_off] and [src_off] are declared
+   without a default value on purpose: a default would make the compiler emit a
+   wrapper function which only unpacks the option and tail-calls the real one.
+   This is the same strategy as [Cstruct]. *)
+
+let[@inline always] some_or_zero = function Some v -> v | None -> 0
 
 let blit a b =
-  let len = Int.min a.len b.len in
-  S.blit a.buf ~src_off:a.off b.buf ~dst_off:b.off ~len
+  let len = if a.len <= b.len then a.len else b.len in
+  S.unsafe_blit a.buf ~src_off:a.off b.buf ~dst_off:b.off ~len
 
-let blit_from_bytes src ~src_off { Slice.buf; off; _ } ?dst_off len =
-  let dst_off =
-    match dst_off with Some dst_off -> dst_off + off | None -> off
-  in
-  if len < 0 || dst_off < 0 || dst_off > S.length buf - len then
-    invalid_arg "Slice.blit_from_bytes";
-  S.blit_from_bytes src ~src_off buf ~dst_off ~len
+let blit_from_bytes src ~src_off t ?dst_off len =
+  let dst_off = some_or_zero dst_off in
+  if
+    len < 0
+    || src_off < 0
+    || src_off > Bytes.length src - len
+    || dst_off < 0
+    || dst_off > t.len - len
+  then invalid_arg "Slice.blit_from_bytes";
+  S.unsafe_blit_from_bytes src ~src_off t.buf ~dst_off:(t.off + dst_off) ~len
 
-let blit_to_bytes { Slice.buf; off; _ } ?src_off dst ~dst_off ~len =
-  let src_off =
-    match src_off with Some src_off -> src_off + off | None -> off
-  in
-  if len < 0 || src_off < 0 || src_off > S.length buf - len then
-    invalid_arg "Slice.blit_to_bytes";
-  S.blit_to_bytes buf ~src_off dst ~dst_off ~len
+let blit_to_bytes t ?src_off dst ~dst_off ~len =
+  let src_off = some_or_zero src_off in
+  if
+    len < 0
+    || src_off < 0
+    || src_off > t.len - len
+    || dst_off < 0
+    || dst_off > Bytes.length dst - len
+  then invalid_arg "Slice.blit_to_bytes";
+  S.unsafe_blit_to_bytes t.buf ~src_off:(t.off + src_off) dst ~dst_off ~len
 
-let fill { off; len; buf } ?off:(off' = 0) ?len:len' chr =
-  let len' = match len' with Some len' -> len' | None -> len - off' in
-  S.fill buf ~off:(off + off') ~len:len' chr
+let blit_from_string src ~src_off t ?dst_off len =
+  let dst_off = some_or_zero dst_off in
+  if
+    len < 0
+    || src_off < 0
+    || src_off > String.length src - len
+    || dst_off < 0
+    || dst_off > t.len - len
+  then invalid_arg "Slice.blit_from_string";
+  S.unsafe_blit_from_string src ~src_off t.buf ~dst_off:(t.off + dst_off) ~len
+
+let fill t ?off ?len chr =
+  let off = some_or_zero off in
+  let len = match len with Some len -> len | None -> t.len - off in
+  if len < 0 || off < 0 || off > t.len - len then invalid_arg "Slice.fill";
+  S.unsafe_fill t.buf ~off:(t.off + off) ~len chr
 
 let sub t ~off ~len = Slice.sub t ~off ~len
 let shift t n = Slice.shift t n
 let is_empty t = Slice.is_empty t
 
-let sub_string { Slice.buf; off; _ } ~off:off' ~len =
+let unsafe_sub_string t off len =
   let dst = Bytes.create len in
-  S.blit_to_bytes buf ~src_off:(off + off') dst ~dst_off:0 ~len;
+  S.blit_to_bytes t.buf ~src_off:(t.off + off) dst ~dst_off:0 ~len;
   Bytes.unsafe_to_string dst
 
-let to_string { Slice.buf; off= src_off; len } =
-  let dst = Bytes.create len in
-  S.blit_to_bytes buf ~src_off dst ~dst_off:0 ~len;
-  Bytes.unsafe_to_string dst
+let sub_string t ~off ~len =
+  if len < 0 || off < 0 || off > length t - len then
+    invalid_arg "Slice.sub_string";
+  unsafe_sub_string t off len
+
+let to_string t = unsafe_sub_string t 0 (length t)
 
 let of_string str =
-  let off = 0 and len = String.length str in
-  Slice.unsafe_make ~off ~len (S.of_string str)
+  let len = String.length str in
+  Slice.unsafe_make ~off:0 ~len (S.of_string str)
 
 let string ?(off = 0) ?len str =
   let len =
@@ -126,7 +128,7 @@ let overlap ({ buf= buf0; _ } as a) ({ buf= buf1; _ } as b) =
         let offset = a.off - b.off in
         Some (len, 0, offset)
       else if b.off >= a.off && b.off < a.off + a.len then
-        let offset = b.off + a.off in
+        let offset = b.off - a.off in
         Some (len, offset, 0)
       else None
   | Some _ ->
@@ -135,3 +137,644 @@ let overlap ({ buf= buf0; _ } as a) ({ buf= buf1; _ } as b) =
       S.overlap a b
 (* TODO(dinosaure): this case appears only for bigstrings, but we could
          optimize it and avoid [S.sub]. *)
+
+let create len =
+  if len < 0 then invalid_arg "Slice.create";
+  Slice.unsafe_make ~off:0 ~len (S.make len '\000')
+
+let init len fn =
+  if len < 0 then invalid_arg "Slice.init";
+  Slice.unsafe_make ~off:0 ~len (S.init len fn)
+
+let copy { buf= src; off= src_off; len } =
+  let buf = S.create len in
+  S.blit src ~src_off buf ~dst_off:0 ~len;
+  Slice.unsafe_make ~off:0 ~len buf
+
+let with_range ?(first = 0) ?(len = max_int) t =
+  if len < 0 then invalid_arg "Slice.with_range";
+  if len == 0 then empty
+  else
+    let max_idx = length t - 1 in
+    let last =
+      match len with
+      | len when len = max_int -> max_idx
+      | len ->
+          let last = first + len - 1 in
+          if last > max_idx then max_idx else last
+    in
+    let first = if first < 0 then 0 else first in
+    if first > max_idx || last < 0 || first > last then empty
+    else unsafe_sub t first (last + 1 - first)
+
+let with_index_range ?(first = 0) ?last t =
+  let max_idx = length t - 1 in
+  let last =
+    match last with
+    | None -> max_idx
+    | Some last -> if last > max_idx then max_idx else last
+  in
+  let first = if first < 0 then 0 else first in
+  if first > max_idx || last < 0 || first > last then empty
+  else unsafe_sub t first (last + 1 - first)
+
+let[@inline always] unsafe_get { buf; off; _ } idx = S.unsafe_get buf (off + idx)
+
+let[@inline always] unsafe_set { buf; off; _ } idx chr =
+  S.unsafe_set buf (off + idx) chr
+
+(* [out t idx size] is [true] if the [size] bytes starting at [idx] are not
+   fully contained into [t]. Like [Cstruct], accessors check the bounds of the
+   slice (and not the bounds of the underlying buffer) and then access the
+   buffer without any further check. *)
+let[@inline always] check { len; _ } idx size = idx < 0 || idx > len - size
+
+let get t idx =
+  if check t idx 1 then invalid_arg "Slice.get";
+  S.unsafe_get t.buf (t.off + idx)
+
+let set t idx chr =
+  if check t idx 1 then invalid_arg "Slice.set";
+  S.unsafe_set t.buf (t.off + idx) chr
+
+let get_int8 t idx =
+  if check t idx 1 then invalid_arg "Slice.get_int8";
+  S.unsafe_get_int8 t.buf (t.off + idx)
+
+let get_uint8 t idx =
+  if check t idx 1 then invalid_arg "Slice.get_uint8";
+  S.unsafe_get_uint8 t.buf (t.off + idx)
+
+let get_uint16_ne t idx =
+  if check t idx 2 then invalid_arg "Slice.get_uint16_ne";
+  S.unsafe_get_uint16_ne t.buf (t.off + idx)
+
+let get_uint16_le t idx =
+  if check t idx 2 then invalid_arg "Slice.get_uint16_le";
+  S.unsafe_get_uint16_le t.buf (t.off + idx)
+
+let get_uint16_be t idx =
+  if check t idx 2 then invalid_arg "Slice.get_uint16_be";
+  S.unsafe_get_uint16_be t.buf (t.off + idx)
+
+let get_int16_ne t idx =
+  if check t idx 2 then invalid_arg "Slice.get_int16_ne";
+  S.unsafe_get_int16_ne t.buf (t.off + idx)
+
+let get_int16_le t idx =
+  if check t idx 2 then invalid_arg "Slice.get_int16_le";
+  S.unsafe_get_int16_le t.buf (t.off + idx)
+
+let get_int16_be t idx =
+  if check t idx 2 then invalid_arg "Slice.get_int16_be";
+  S.unsafe_get_int16_be t.buf (t.off + idx)
+
+let get_int32_ne t idx =
+  if check t idx 4 then invalid_arg "Slice.get_int32_ne";
+  S.unsafe_get_int32_ne t.buf (t.off + idx)
+
+let get_int32_le t idx =
+  if check t idx 4 then invalid_arg "Slice.get_int32_le";
+  S.unsafe_get_int32_le t.buf (t.off + idx)
+
+let get_int32_be t idx =
+  if check t idx 4 then invalid_arg "Slice.get_int32_be";
+  S.unsafe_get_int32_be t.buf (t.off + idx)
+
+let get_int64_ne t idx =
+  if check t idx 8 then invalid_arg "Slice.get_int64_ne";
+  S.unsafe_get_int64_ne t.buf (t.off + idx)
+
+let get_int64_le t idx =
+  if check t idx 8 then invalid_arg "Slice.get_int64_le";
+  S.unsafe_get_int64_le t.buf (t.off + idx)
+
+let get_int64_be t idx =
+  if check t idx 8 then invalid_arg "Slice.get_int64_be";
+  S.unsafe_get_int64_be t.buf (t.off + idx)
+
+let set_int8 t idx v =
+  if check t idx 1 then invalid_arg "Slice.set_int8";
+  S.unsafe_set_int8 t.buf (t.off + idx) v
+
+let set_uint8 t idx v =
+  if check t idx 1 then invalid_arg "Slice.set_uint8";
+  S.unsafe_set_uint8 t.buf (t.off + idx) v
+
+let set_uint16_ne t idx v =
+  if check t idx 2 then invalid_arg "Slice.set_uint16_ne";
+  S.unsafe_set_uint16_ne t.buf (t.off + idx) v
+
+let set_uint16_le t idx v =
+  if check t idx 2 then invalid_arg "Slice.set_uint16_le";
+  S.unsafe_set_uint16_le t.buf (t.off + idx) v
+
+let set_uint16_be t idx v =
+  if check t idx 2 then invalid_arg "Slice.set_uint16_be";
+  S.unsafe_set_uint16_be t.buf (t.off + idx) v
+
+let set_int16_ne t idx v =
+  if check t idx 2 then invalid_arg "Slice.set_int16_ne";
+  S.unsafe_set_int16_ne t.buf (t.off + idx) v
+
+let set_int16_le t idx v =
+  if check t idx 2 then invalid_arg "Slice.set_int16_le";
+  S.unsafe_set_int16_le t.buf (t.off + idx) v
+
+let set_int16_be t idx v =
+  if check t idx 2 then invalid_arg "Slice.set_int16_be";
+  S.unsafe_set_int16_be t.buf (t.off + idx) v
+
+let set_int32_ne t idx v =
+  if check t idx 4 then invalid_arg "Slice.set_int32_ne";
+  S.unsafe_set_int32_ne t.buf (t.off + idx) v
+
+let set_int32_le t idx v =
+  if check t idx 4 then invalid_arg "Slice.set_int32_le";
+  S.unsafe_set_int32_le t.buf (t.off + idx) v
+
+let set_int32_be t idx v =
+  if check t idx 4 then invalid_arg "Slice.set_int32_be";
+  S.unsafe_set_int32_be t.buf (t.off + idx) v
+
+let set_int64_ne t idx v =
+  if check t idx 8 then invalid_arg "Slice.set_int64_ne";
+  S.unsafe_set_int64_ne t.buf (t.off + idx) v
+
+let set_int64_le t idx v =
+  if check t idx 8 then invalid_arg "Slice.set_int64_le";
+  S.unsafe_set_int64_le t.buf (t.off + idx) v
+
+let set_int64_be t idx v =
+  if check t idx 8 then invalid_arg "Slice.set_int64_be";
+  S.unsafe_set_int64_be t.buf (t.off + idx) v
+
+let hex_digits = "0123456789abcdef"
+
+let hex t =
+  let len = length t in
+  let res = Bytes.create (len * 2) in
+  for idx = 0 to len - 1 do
+    let code = Char.code (unsafe_get t idx) in
+    Bytes.unsafe_set res (idx * 2) (String.unsafe_get hex_digits (code lsr 4));
+    Bytes.unsafe_set res
+      ((idx * 2) + 1)
+      (String.unsafe_get hex_digits (code land 0x0f))
+  done;
+  Bytes.unsafe_to_string res
+
+let compare a b =
+  let len_a = a.len and len_b = b.len in
+  if len_a < len_b then -1
+  else if len_a > len_b then 1
+  else S.unsafe_memcmp a.buf ~src_off:a.off b.buf ~dst_off:b.off ~len:len_a
+
+let equal a b =
+  a.len == b.len
+  && S.unsafe_equal a.buf ~src_off:a.off b.buf ~dst_off:b.off ~len:a.len
+
+let constant_equal a b =
+  let len = length a in
+  if len != length b then false
+  else begin
+    let res = ref 0 in
+    for idx = 0 to len - 1 do
+      res :=
+        !res lor (Char.code (unsafe_get a idx) lxor Char.code (unsafe_get b idx))
+    done;
+    !res == 0
+  end
+
+let hash t =
+  let res = ref 5381 in
+  for idx = 0 to length t - 1 do
+    res := (!res lsl 5) + !res + Char.code (unsafe_get t idx)
+  done;
+  !res land max_int
+
+let chop ?(rev = false) t =
+  if length t == 0 then None
+  else if not rev then Some (unsafe_get t 0)
+  else Some (unsafe_get t (length t - 1))
+
+let is_prefix ~affix t =
+  let len_affix = String.length affix in
+  let len_t = length t in
+  if len_affix > len_t then false
+  else
+    let max_idx_affix = len_affix - 1 in
+    let rec go idx =
+      if idx > max_idx_affix then true
+      else if String.unsafe_get affix idx != unsafe_get t idx then false
+      else go (idx + 1)
+    in
+    go 0
+
+let starts_with ~prefix t =
+  let len_prefix = String.length prefix in
+  let len_t = length t in
+  if len_prefix > len_t then false
+  else
+    let max_idx_prefix = len_prefix - 1 in
+    let rec go idx =
+      if idx > max_idx_prefix then true
+      else if String.unsafe_get prefix idx != unsafe_get t idx then false
+      else go (idx + 1)
+    in
+    go 0
+
+let is_suffix ~affix t =
+  let max_idx_affix = String.length affix - 1 in
+  let max_idx_t = length t - 1 in
+  if max_idx_affix > max_idx_t then false
+  else
+    let rec go idx =
+      if idx > max_idx_affix then true
+      else if
+        String.unsafe_get affix (max_idx_affix - idx)
+        != unsafe_get t (max_idx_t - idx)
+      then false
+      else go (idx + 1)
+    in
+    go 0
+
+let ends_with ~suffix t =
+  let max_idx_suffix = String.length suffix - 1 in
+  let max_idx_t = length t - 1 in
+  if max_idx_suffix > max_idx_t then false
+  else
+    let rec go idx =
+      if idx > max_idx_suffix then true
+      else if
+        String.unsafe_get suffix (max_idx_suffix - idx)
+        != unsafe_get t (max_idx_t - idx)
+      then false
+      else go (idx + 1)
+    in
+    go 0
+
+let is_infix ~affix t =
+  let len_affix = String.length affix in
+  let len_t = length t in
+  if len_affix > len_t then false
+  else
+    let max_idx_affix = len_affix - 1 in
+    let max_idx_t = len_t - len_affix in
+    let rec go idx k =
+      if idx > max_idx_t then false
+      else if k > max_idx_affix then true
+      else if k > 0 then
+        if String.unsafe_get affix k == unsafe_get t (idx + k) then
+          go idx (succ k)
+        else go (succ idx) 0
+      else if String.unsafe_get affix 0 == unsafe_get t idx then go idx 1
+      else go (idx + 1) 0
+    in
+    go 0 0
+
+exception Break
+
+let for_all sat t =
+  try
+    for idx = 0 to length t - 1 do
+      if sat (unsafe_get t idx) == false then raise_notrace Break
+    done;
+    true
+  with Break -> false
+
+let exists sat t =
+  try
+    for idx = 0 to length t - 1 do
+      if sat (unsafe_get t idx) then raise_notrace Break
+    done;
+    false
+  with Break -> true
+
+let index t ?(off = 0) ?len chr =
+  let len = match len with Some len -> len | None -> length t - off in
+  if len < 0 || off < 0 || off > length t - len then invalid_arg "Slice.index";
+  match S.memchr t.buf ~off:(t.off + off) ~len chr with
+  | -1 -> None
+  | idx -> Some (idx - t.off)
+
+let contains t ?(off = 0) ?len chr =
+  let len = match len with Some len -> len | None -> length t - off in
+  if len < 0 || off < 0 || off > length t - len then
+    invalid_arg "Slice.contains";
+  S.memchr t.buf ~off:(t.off + off) ~len chr != -1
+
+(* {2 Extracting sub-slices.} *)
+
+let is_white chr = chr == ' ' || chr == '\t'
+
+let trim ?(drop = is_white) t =
+  let len = length t in
+  if len == 0 then t
+  else
+    let max_idx = len - 1 in
+    let rec left_pos idx =
+      if idx > max_idx then len
+      else if drop (unsafe_get t idx) then left_pos (succ idx)
+      else idx
+    in
+    let rec right_pos idx =
+      if idx < 0 then 0
+      else if drop (unsafe_get t idx) then right_pos (pred idx)
+      else succ idx
+    in
+    let left = left_pos 0 in
+    if left = len then empty
+    else
+      let right = right_pos max_idx in
+      if left == 0 && right == len then t else unsafe_sub t left (right - left)
+
+let fspan ?(min = 0) ?(max = max_int) ?(sat = Fun.const true) t =
+  if min < 0 then invalid_arg "Slice.span";
+  if max < 0 then invalid_arg "Slice.span";
+  if min > max || max == 0 then (empty, t)
+  else
+    let len = length t in
+    let max_idx = len - 1 in
+    let max_idx =
+      let k = max - 1 in
+      if k > max_idx then max_idx else k
+    in
+    let need_idx = min in
+    let rec go idx =
+      if idx <= max_idx && sat (unsafe_get t idx) then go (succ idx)
+      else if idx < need_idx || idx == 0 then (empty, t)
+      else if idx == len then (t, empty)
+      else
+        let a = unsafe_sub t 0 idx in
+        let b = unsafe_sub t idx (len - idx) in
+        (a, b)
+    in
+    go 0
+
+let rspan ?(min = 0) ?(max = max_int) ?(sat = Fun.const true) t =
+  if min < 0 then invalid_arg "Slice.span";
+  if max < 0 then invalid_arg "Slice.span";
+  if min > max || max == 0 then (t, empty)
+  else
+    let len = length t in
+    let max_idx = len - 1 in
+    let min_idx =
+      let k = len - max in
+      if k < 0 then 0 else k
+    in
+    let need_idx = len - min - 1 in
+    let rec go idx =
+      if idx >= min_idx && sat (unsafe_get t idx) then go (idx - 1)
+      else if idx > need_idx || idx == max_idx then (t, empty)
+      else if idx < 0 then (empty, t)
+      else
+        let cut = idx + 1 in
+        let a = unsafe_sub t 0 cut in
+        let b = unsafe_sub t cut (len - cut) in
+        (a, b)
+    in
+    go max_idx
+
+let span ?(rev = false) ?min ?max ?sat t =
+  match rev with
+  | true -> rspan ?min ?max ?sat t
+  | false -> fspan ?min ?max ?sat t
+
+let take ?(rev = false) ?min ?max ?sat t =
+  let a, b = span ~rev ?min ?max ?sat t in
+  if rev then b else a
+
+let drop ?(rev = false) ?min ?max ?sat t =
+  let a, b = span ~rev ?min ?max ?sat t in
+  if rev then a else b
+
+let fcut ~sep t =
+  let sep_len = String.length sep in
+  let len = length t in
+  if sep_len == 0 then invalid_arg "Slice.cut: empty separator";
+  let max_sep_zidx = sep_len - 1 in
+  let max_s_zidx = len - sep_len in
+  let rec check_sep i k =
+    if k > max_sep_zidx then
+      let a = unsafe_sub t 0 i in
+      let b = unsafe_sub t (i + sep_len) (len - i - sep_len) in
+      Some (a, b)
+    else if unsafe_get t (i + k) == String.unsafe_get sep k then
+      check_sep i (k + 1)
+    else scan (i + 1)
+  and scan i =
+    if i > max_s_zidx then None
+    else if unsafe_get t i == String.unsafe_get sep 0 then check_sep i 1
+    else scan (i + 1)
+  in
+  scan 0
+
+let rcut ~sep t =
+  let sep_len = String.length sep in
+  let len = length t in
+  if sep_len == 0 then invalid_arg "Slice.cut: empty separator";
+  let max_sep_zidx = sep_len - 1 in
+  let max_s_zidx = len - 1 in
+  let rec check_sep i k =
+    if k > max_sep_zidx then
+      let a = unsafe_sub t 0 i in
+      let b = unsafe_sub t (i + sep_len) (len - i - sep_len) in
+      Some (a, b)
+    else if unsafe_get t (i + k) == String.unsafe_get sep k then
+      check_sep i (k + 1)
+    else rscan (i - 1)
+  and rscan i =
+    if i < 0 then None
+    else if unsafe_get t i == String.unsafe_get sep 0 then check_sep i 1
+    else rscan (i - 1)
+  in
+  rscan (max_s_zidx - max_sep_zidx)
+
+let cut ?(rev = false) ~sep t =
+  match rev with true -> rcut ~sep t | false -> fcut ~sep t
+
+let add_sub ~no_empty t ~start ~stop acc =
+  if start = stop then if no_empty then acc else empty :: acc
+  else unsafe_sub t start (stop - start) :: acc
+
+let fcuts ~no_empty ~sep t =
+  let sep_len = String.length sep in
+  if sep_len = 0 then invalid_arg "Slice.cuts: empty separator";
+  let t_len = length t in
+  let max_sep_idx = sep_len - 1 in
+  let max_t_idx = t_len - sep_len in
+  let rec check_sep start i k acc =
+    if k > max_sep_idx then
+      let new_start = i + sep_len in
+      scan new_start new_start (add_sub ~no_empty t ~start ~stop:i acc)
+    else if unsafe_get t (i + k) = String.unsafe_get sep k then
+      check_sep start i (k + 1) acc
+    else scan start (i + 1) acc
+  and scan start i acc =
+    if i > max_t_idx then
+      if start = 0 then if no_empty && t_len = 0 then [] else [ t ]
+      else List.rev (add_sub ~no_empty t ~start ~stop:t_len acc)
+    else if unsafe_get t i = String.unsafe_get sep 0 then
+      check_sep start i 1 acc
+    else scan start (i + 1) acc
+  in
+  scan 0 0 []
+
+let rcuts ~no_empty ~sep t =
+  let sep_len = String.length sep in
+  if sep_len = 0 then invalid_arg "Slice.cuts: empty separator";
+  let t_len = length t in
+  let max_sep_idx = sep_len - 1 in
+  let max_t_idx = t_len - 1 in
+  let rec check_sep stop i k acc =
+    if k > max_sep_idx then
+      let start = i + sep_len in
+      rscan i (i - sep_len) (add_sub ~no_empty t ~start ~stop acc)
+    else if unsafe_get t (i + k) = String.unsafe_get sep k then
+      check_sep stop i (k + 1) acc
+    else rscan stop (i - 1) acc
+  and rscan stop i acc =
+    if i < 0 then
+      if stop = t_len then if no_empty && t_len = 0 then [] else [ t ]
+      else add_sub ~no_empty t ~start:0 ~stop acc
+    else if unsafe_get t i = String.unsafe_get sep 0 then check_sep stop i 1 acc
+    else rscan stop (i - 1) acc
+  in
+  rscan t_len (max_t_idx - max_sep_idx) []
+
+let cuts ?(rev = false) ?(empty = true) ~sep t =
+  match rev with
+  | true -> rcuts ~no_empty:(not empty) ~sep t
+  | false -> fcuts ~no_empty:(not empty) ~sep t
+
+let split_on_char sep t =
+  let lst = ref [] in
+  let stop = ref (length t) in
+  for idx = length t - 1 downto 0 do
+    if unsafe_get t idx == sep then begin
+      lst := unsafe_sub t (idx + 1) (!stop - idx - 1) :: !lst;
+      stop := idx
+    end
+  done;
+  unsafe_sub t 0 !stop :: !lst
+
+let concat sep = function
+  | [] -> empty
+  | x :: r as lst ->
+      let sep_len = String.length sep in
+      let fn acc t = acc + sep_len + length t in
+      let res_len = List.fold_left fn (length x) r in
+      let res = S.create res_len in
+      let first = ref true in
+      let dst_off = ref 0 in
+      let fn t =
+        if !first then first := false
+        else begin
+          S.blit_from_string sep ~src_off:0 res ~dst_off:!dst_off ~len:sep_len;
+          dst_off := !dst_off + sep_len
+        end;
+        let len = length t in
+        S.blit t.buf ~src_off:t.off res ~dst_off:!dst_off ~len;
+        dst_off := !dst_off + len
+      in
+      List.iter fn lst;
+      Slice.unsafe_make ~off:0 ~len:res_len res
+
+let append a b = concat "" [ a; b ]
+
+let ( ++ ) a b =
+  let c = a + b in
+  match (a < 0, b < 0, c < 0) with
+  | true, true, false | false, false, true -> invalid_arg "Slice.extend"
+  | _ -> c
+
+let extend t left right =
+  let len = length t ++ left ++ right in
+  let res = S.make len '\000' in
+  let src_off, dst_off = if left < 0 then (-left, 0) else (0, left) in
+  let copy = min (length t - src_off) (len - dst_off) in
+  if copy > 0 then
+    S.blit t.buf ~src_off:(t.off + src_off) res ~dst_off ~len:copy;
+  Slice.unsafe_make ~off:0 ~len res
+
+let iter fn t =
+  for idx = 0 to length t - 1 do
+    fn (unsafe_get t idx)
+  done
+
+let iteri fn t =
+  for idx = 0 to length t - 1 do
+    fn idx (unsafe_get t idx)
+  done
+
+let map fn t =
+  let len = length t in
+  let res = S.create len in
+  for idx = 0 to len - 1 do
+    S.unsafe_set res idx (fn (unsafe_get t idx))
+  done;
+  Slice.unsafe_make ~off:0 ~len res
+
+let mapi fn t =
+  let len = length t in
+  let res = S.create len in
+  for idx = 0 to len - 1 do
+    S.unsafe_set res idx (fn idx (unsafe_get t idx))
+  done;
+  Slice.unsafe_make ~off:0 ~len res
+
+let fold_left fn acc t =
+  let acc = ref acc in
+  for idx = 0 to length t - 1 do
+    acc := fn !acc (unsafe_get t idx)
+  done;
+  !acc
+
+let fold_right fn t acc =
+  let acc = ref acc in
+  for idx = length t - 1 downto 0 do
+    acc := fn (unsafe_get t idx) !acc
+  done;
+  !acc
+
+let filter sat t =
+  let len = length t in
+  let res = S.create len in
+  let pos = ref 0 in
+  for idx = 0 to len - 1 do
+    let chr = unsafe_get t idx in
+    if sat chr then begin
+      S.unsafe_set res !pos chr; incr pos
+    end
+  done;
+  Slice.unsafe_make ~off:0 ~len:!pos res
+
+let filter_map fn t =
+  let len = length t in
+  let res = S.create len in
+  let pos = ref 0 in
+  for idx = 0 to len - 1 do
+    match fn (unsafe_get t idx) with
+    | Some chr -> S.unsafe_set res !pos chr; incr pos
+    | None -> ()
+  done;
+  Slice.unsafe_make ~off:0 ~len:!pos res
+
+let to_seq t =
+  let rec go idx () =
+    if idx == length t then Seq.Nil
+    else Seq.Cons (unsafe_get t idx, go (idx + 1))
+  in
+  go 0
+
+let to_seqi t =
+  let rec go idx () =
+    if idx == length t then Seq.Nil
+    else Seq.Cons ((idx, unsafe_get t idx), go (idx + 1))
+  in
+  go 0
+
+let of_seq seq =
+  let buf = Buffer.create 0x100 in
+  Seq.iter (Buffer.add_char buf) seq;
+  of_string (Buffer.contents buf)

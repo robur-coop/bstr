@@ -19,4 +19,4 @@
  (name s)
  (modules s)
  (package slice)
- (libraries slice.bstr test))
+ (libraries bstr slice slice.bstr slice.bytes test))

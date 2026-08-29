@@ -2,7 +2,7 @@
  (name sub)
  (enabled_if
   (= %{profile} benchmark))
- (libraries slice.bstr bstr cstruct bechamel bechamel-js))
+ (libraries slice.bytes slice.bstr bstr cstruct bechamel bechamel-js))
 
 (rule
  (targets sub.json)
@@ -24,7 +24,14 @@
  (name blit)
  (enabled_if
   (= %{profile} benchmark))
- (libraries bstr cstruct bechamel bechamel-js))
+ (libraries
+  bstr
+  slice.bytes
+  slice.bstr
+  cstruct
+  bigstringaf
+  bechamel
+  bechamel-js))
 
 (rule
  (targets blit.json)
@@ -46,7 +53,15 @@
  (name equal)
  (enabled_if
   (= %{profile} benchmark))
- (libraries base64 slice.bstr bstr cstruct bigstringaf bechamel bechamel-js))
+ (libraries
+  base64
+  slice.bstr
+  slice.bytes
+  bstr
+  cstruct
+  bigstringaf
+  bechamel
+  bechamel-js))
 
 (rule
  (targets equal.json)

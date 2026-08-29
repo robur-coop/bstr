@@ -1572,6 +1572,47 @@ let test84 =
   set "int64_be" 8 Bstr.set_int64_be Bstr.unsafe_set_int64_be 0x123456789abcdefL;
   check true
 
+let test85 =
+  let descr = {text|map, fold, filter, hex, hash and append|text} in
+  Test.test ~title:"traversals" ~descr @@ fun () ->
+  let bstr = Bstr.of_string "abcdef" in
+  let eq bstr str = check (String.equal (Bstr.to_string bstr) str) in
+  eq (Bstr.map Char.uppercase_ascii bstr) "ABCDEF";
+  eq (Bstr.map Char.uppercase_ascii Bstr.empty) "";
+  let fn idx chr = if idx land 1 = 0 then Char.uppercase_ascii chr else chr in
+  eq (Bstr.mapi fn bstr) (String.mapi fn "abcdef");
+  let buf = Buffer.create 0x10 in
+  Bstr.iteri
+    (fun idx chr -> Buffer.add_string buf (Format.sprintf "%d%c" idx chr))
+    bstr;
+  check (String.equal (Buffer.contents buf) "0a1b2c3d4e5f");
+  let fn acc chr = acc ^ String.make 1 chr in
+  check (String.equal (Bstr.fold_left fn "" bstr) "abcdef");
+  let fn chr acc = acc ^ String.make 1 chr in
+  check (String.equal (Bstr.fold_right fn bstr "") "fedcba");
+  eq (Bstr.filter (fun chr -> chr != 'c') bstr) "abdef";
+  eq (Bstr.filter (fun _ -> false) bstr) "";
+  eq (Bstr.filter (fun _ -> true) bstr) "abcdef";
+  let fn chr = if chr == 'c' then None else Some (Char.uppercase_ascii chr) in
+  eq (Bstr.filter_map fn bstr) "ABDEF";
+  check (Bstr.exists (fun chr -> chr == 'f') bstr);
+  check (Bstr.exists (fun chr -> chr == 'z') bstr == false);
+  check (Bstr.exists (fun _ -> true) Bstr.empty == false);
+  check (String.equal (Bstr.hex bstr) "616263646566");
+  check (String.equal (Bstr.hex Bstr.empty) "");
+  check (String.equal (Bstr.hex (Bstr.of_string "\x00\x0f\xff")) "000fff");
+  check (Bstr.hash bstr == Bstr.hash (Bstr.of_string "abcdef"));
+  check (Bstr.hash bstr != Bstr.hash (Bstr.of_string "abcdeg"));
+  check (Bstr.hash Bstr.empty == Bstr.hash Bstr.empty);
+  eq (Bstr.append bstr (Bstr.of_string "gh")) "abcdefgh";
+  eq (Bstr.append Bstr.empty bstr) "abcdef";
+  eq (Bstr.append bstr Bstr.empty) "abcdef";
+  let res = Bstr.map Fun.id bstr in
+  Bstr.set res 0 'z';
+  eq bstr "abcdef";
+  let res = Bstr.filter (fun _ -> true) bstr in
+  Bstr.set res 0 'z'; eq bstr "abcdef"
+
 let ( / ) = Filename.concat
 
 let () =
@@ -1586,7 +1627,7 @@ let () =
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
     ; test64; test65; test66; test67; test68; test69; test70; test71; test72
     ; test73; test74; test75; test76; test77; test78; test79; test80; test81
-    ; test82; test83; test84
+    ; test82; test83; test84; test85
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in

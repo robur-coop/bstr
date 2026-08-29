@@ -44,9 +44,26 @@ let cstruct_equal =
   @@ Staged.stage
   @@ fun () -> Cstruct.equal hash_eq_0 hash_eq_1
 
+let slice_bytes_equal =
+  let hash_eq_0 = Slice_bytes.of_string hash_eq_0 in
+  let hash_eq_1 = Slice_bytes.of_string hash_eq_1 in
+  Test.make ~name:"slice_bytes"
+  @@ Staged.stage
+  @@ fun () -> Slice_bytes.equal hash_eq_0 hash_eq_1
+
+let slice_bstr_equal =
+  let hash_eq_0 = Slice_bstr.of_string hash_eq_0 in
+  let hash_eq_1 = Slice_bstr.of_string hash_eq_1 in
+  Test.make ~name:"slice_bstr"
+  @@ Staged.stage
+  @@ fun () -> Slice_bstr.equal hash_eq_0 hash_eq_1
+
 let tests =
   Test.make_grouped ~name:"equal" ~fmt:"%s %s"
-    [ bstr_equal; bigstringaf_equal; cstruct_equal ]
+    [
+      bstr_equal; bigstringaf_equal; cstruct_equal; slice_bytes_equal
+    ; slice_bstr_equal
+    ]
 
 let benchmark () =
   let bootstrap = 0 and r_square = true and predictors = Measure.[| run |] in

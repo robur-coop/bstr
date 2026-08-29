@@ -128,6 +128,9 @@ val to_string : t -> string
 (** [to_string bstr] is equivalent to
     [sub_string bstr ~off:0 ~len:(length bstr)]. *)
 
+val hex : t -> string
+(** [hex bstr] is the hexadecimal (lowercase) representation of [bstr]. *)
+
 val length : t -> int
 (** [length bstr] is the number of bytes in [bstr]. *)
 
@@ -158,6 +161,10 @@ val chop : ?rev:bool -> t -> char option
 val concat : string -> t list -> t
 (** [concat sep ts] concatenates the list of bigstrings [ts], inserting the
     separator string [sep] between each. *)
+
+val append : t -> t -> t
+(** [append a b] is a fresh bigstring which contains the bytes of [a] followed
+    by the bytes of [b]. It is equivalent to [concat "" [ a; b ]]. *)
 
 val extend : t -> int -> int -> t
 (** [extend bstr left right] returns a new bigstring that contains the bytes of
@@ -200,6 +207,34 @@ val blit_from_bytes :
     @raise Invalid_argument
       if [src_pos] and [len] do not designate a valid range of [src], or if
       [dst_off] and [len] do not designate a valid range of [dst]. *)
+
+val unsafe_memcmp : t -> src_off:int -> t -> dst_off:int -> len:int -> int
+(** [unsafe_memcmp] is {!val:memcmp} without any bound checking. *)
+
+val unsafe_equal : t -> src_off:int -> t -> dst_off:int -> len:int -> bool
+(** [unsafe_equal src ~src_off dst ~dst_off ~len] is
+    [unsafe_memcmp src ~src_off dst ~dst_off ~len = 0]. *)
+
+val unsafe_blit : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** [unsafe_blit] is {!val:blit} without any bound checking. *)
+
+val unsafe_blit_from_string :
+  string -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** [unsafe_blit_from_string] is {!val:blit_from_string} without any bound
+    checking. *)
+
+val unsafe_blit_from_bytes :
+  bytes -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** [unsafe_blit_from_bytes] is {!val:blit_from_bytes} without any bound
+    checking. *)
+
+val unsafe_blit_to_bytes :
+  t -> src_off:int -> bytes -> dst_off:int -> len:int -> unit
+(** [unsafe_blit_to_bytes] is {!val:blit_to_bytes} without any bound checking.
+*)
+
+val unsafe_fill : t -> off:int -> len:int -> char -> unit
+(** [unsafe_fill] is {!val:fill} without any bound checking. *)
 
 val blit_to_bytes : t -> src_off:int -> bytes -> dst_off:int -> len:int -> unit
 (** [blit_to_bytes src ~src_off dst ~dst_off ~len] copies [len] bytes from
@@ -303,15 +338,15 @@ val get_uint8 : t -> int -> int
     [i]. *)
 
 val get_uint16_ne : t -> int -> int
-(** [get_int16_ne bstr i] is [bstr]'s native-endian unsigned 16-bit integer
+(** [get_uint16_ne bstr i] is [bstr]'s native-endian unsigned 16-bit integer
     starting at byte index [i]. *)
 
 val get_uint16_le : t -> int -> int
-(** [get_int16_le bstr i] is [bstr]'s little-endian unsigned 16-bit integer
+(** [get_uint16_le bstr i] is [bstr]'s little-endian unsigned 16-bit integer
     starting at byte index [i]. *)
 
 val get_uint16_be : t -> int -> int
-(** [get_int16_be bstr i] is [bstr]'s big-endian unsigned 16-bit integer
+(** [get_uint16_be bstr i] is [bstr]'s big-endian unsigned 16-bit integer
     starting at byte index [i]. *)
 
 val get_int16_ne : t -> int -> int
@@ -499,6 +534,10 @@ val for_all : (char -> bool) -> t -> bool
 (** [for_all p bstr] is [true] iff for all indices [idx] of [bstr],
     [p bstr.{idx} = true]. *)
 
+val exists : (char -> bool) -> t -> bool
+(** [exists p bstr] is [true] iff there exists an index [idx] of [bstr] such
+    that [p bstr.{idx} = true]. *)
+
 val contains : t -> ?off:int -> ?len:int -> char -> bool
 (** [contains bstr ?off ?len chr] is [true] if and only if [chr] appears in
     [len] byte(s)'s [bstr] after position [off] (defaults to [0]). *)
@@ -514,6 +553,10 @@ val constant_equal : t -> t -> bool
     Indeed, the {!val:equal} function ends as soon as a difference exists. This
     function continues even if a difference exists. This function is useful when
     comparing passwords — and avoiding an {i timing attack}. *)
+
+val hash : t -> int
+(** [hash bstr] is a hash of the contents of [bstr]. Two bigstrings which are
+    {!val:equal} have the same hash. *)
 
 val compare : t -> t -> int
 (** [compare bstr0 bstr1] sorts [bstr0] and [bstr1] in lexicographical order. *)
@@ -650,6 +693,40 @@ val split_on_char : char -> t -> t list
 val iter : (char -> unit) -> t -> unit
 (** [iter fn t] applies function [fn] in turn to all the characters of [t]. It
     is equivalent to [fn t.{0}; fn t.{1}; ...; fn t.{length t - 1}; ()]. *)
+
+val iteri : (int -> char -> unit) -> t -> unit
+(** [iteri fn t] is {!val:iter} but the function is also given the index of the
+    character. *)
+
+val map : (char -> char) -> t -> t
+(** [map fn t] is a fresh bigstring made of the bytes of [t] as mapped by [fn],
+    in the same order. *)
+
+val mapi : (int -> char -> char) -> t -> t
+(** [mapi fn t] is {!val:map} but the function is also given the index of the
+    character. *)
+
+val fold_left : ('a -> char -> 'a) -> 'a -> t -> 'a
+(** [fold_left fn acc t] is
+    [fn (... (fn (fn acc t.{0}) t.{1}) ...) t.{length t - 1}]. *)
+
+val fold_right : (char -> 'a -> 'a) -> t -> 'a -> 'a
+(** [fold_right fn t acc] is
+    [fn t.{0} (fn t.{1} (... (fn t.{length t - 1} acc) ...))]. *)
+
+val filter : (char -> bool) -> t -> t
+(** [filter sat t] is a fresh bigstring made of the bytes of [t] that satisfy
+    [sat], in the same order.
+
+    {b Note} the result is a view on a bigstring of [length t] bytes: it shares
+    its memory with a buffer which can be larger than the result itself. *)
+
+val filter_map : (char -> char option) -> t -> t
+(** [filter_map fn t] is a fresh bigstring made of the bytes of [t] as mapped by
+    [fn], in the same order.
+
+    {b Note} the result is a view on a bigstring of [length t] bytes: it shares
+    its memory with a buffer which can be larger than the result itself. *)
 
 val to_seq : t -> char Seq.t
 (** Iterate on the bigstring, in increasing index order. Modifications of the
