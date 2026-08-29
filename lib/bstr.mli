@@ -303,15 +303,15 @@ val get_uint8 : t -> int -> int
     [i]. *)
 
 val get_uint16_ne : t -> int -> int
-(** [get_int16_ne bstr i] is [bstr]'s native-endian unsigned 16-bit integer
+(** [get_uint16_ne bstr i] is [bstr]'s native-endian unsigned 16-bit integer
     starting at byte index [i]. *)
 
 val get_uint16_le : t -> int -> int
-(** [get_int16_le bstr i] is [bstr]'s little-endian unsigned 16-bit integer
+(** [get_uint16_le bstr i] is [bstr]'s little-endian unsigned 16-bit integer
     starting at byte index [i]. *)
 
 val get_uint16_be : t -> int -> int
-(** [get_int16_be bstr i] is [bstr]'s big-endian unsigned 16-bit integer
+(** [get_uint16_be bstr i] is [bstr]'s big-endian unsigned 16-bit integer
     starting at byte index [i]. *)
 
 val get_int16_ne : t -> int -> int
