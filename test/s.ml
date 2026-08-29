@@ -347,7 +347,7 @@ module Make (M : Slice.S) = struct
     M.iter (Buffer.add_char buf) t;
     check (String.equal (Buffer.contents buf) "abcdef");
     let buf = Buffer.create 0x10 in
-    let idx chr = Buffer.add_string buf (strf "%d%c" idx chr) in
+    let fn idx chr = Buffer.add_string buf (strf "%d%c" idx chr) in
     M.iteri fn t;
     check (String.equal (Buffer.contents buf) "0a1b2c3d4e5f");
     eq (M.map Char.uppercase_ascii t) (String.map Char.uppercase_ascii "abcdef");
