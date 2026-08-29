@@ -213,6 +213,9 @@ external unsafe_get : t -> int -> char = "%caml_ba_unsafe_ref_1"
 external set : t -> int -> char -> unit = "%caml_ba_set_1"
 external unsafe_set : t -> int -> char -> unit = "%caml_ba_unsafe_set_1"
 
+let[@inline always] unsafe_fill bstr ~off ~len chr =
+  ignore (unsafe_memset bstr off len (Char.code chr))
+
 let fill bstr ?(off = 0) ?len chr =
   let len = match len with Some len -> len | None -> length bstr - off in
   memset bstr ~off ~len chr
@@ -437,6 +440,11 @@ let blit_from_bytes src ~src_off bstr ~dst_off ~len =
     || dst_off > length bstr - len
   then invalid_arg "Bstr.blit_from_bytes";
   unsafe_blit_from_bytes src ~src_off bstr ~dst_off ~len
+
+let[@inline always] unsafe_blit_from_string src ~src_off bstr ~dst_off ~len =
+  unsafe_blit_from_bytes
+    (Bytes.unsafe_of_string src)
+    ~src_off bstr ~dst_off ~len
 
 let blit_from_string src ~src_off bstr ~dst_off ~len =
   blit_from_bytes (Bytes.unsafe_of_string src) ~src_off bstr ~dst_off ~len
@@ -905,3 +913,9 @@ let of_seq seq =
     incr n
   in
   Seq.iter fn seq; sub !buf ~off:0 ~len:!n
+
+let[@inline always] unsafe_memcmp src ~src_off dst ~dst_off ~len =
+  unsafe_memcmp src src_off dst dst_off len
+
+let[@inline always] unsafe_equal src ~src_off dst ~dst_off ~len =
+  unsafe_memcmp src ~src_off dst ~dst_off ~len == 0

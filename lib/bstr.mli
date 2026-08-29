@@ -201,6 +201,34 @@ val blit_from_bytes :
       if [src_pos] and [len] do not designate a valid range of [src], or if
       [dst_off] and [len] do not designate a valid range of [dst]. *)
 
+val unsafe_memcmp : t -> src_off:int -> t -> dst_off:int -> len:int -> int
+(** [unsafe_memcmp] is {!val:memcmp} without any bound checking. *)
+
+val unsafe_equal : t -> src_off:int -> t -> dst_off:int -> len:int -> bool
+(** [unsafe_equal src ~src_off dst ~dst_off ~len] is
+    [unsafe_memcmp src ~src_off dst ~dst_off ~len = 0]. *)
+
+val unsafe_blit : t -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** [unsafe_blit] is {!val:blit} without any bound checking. *)
+
+val unsafe_blit_from_string :
+  string -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** [unsafe_blit_from_string] is {!val:blit_from_string} without any bound
+    checking. *)
+
+val unsafe_blit_from_bytes :
+  bytes -> src_off:int -> t -> dst_off:int -> len:int -> unit
+(** [unsafe_blit_from_bytes] is {!val:blit_from_bytes} without any bound
+    checking. *)
+
+val unsafe_blit_to_bytes :
+  t -> src_off:int -> bytes -> dst_off:int -> len:int -> unit
+(** [unsafe_blit_to_bytes] is {!val:blit_to_bytes} without any bound checking.
+*)
+
+val unsafe_fill : t -> off:int -> len:int -> char -> unit
+(** [unsafe_fill] is {!val:fill} without any bound checking. *)
+
 val blit_to_bytes : t -> src_off:int -> bytes -> dst_off:int -> len:int -> unit
 (** [blit_to_bytes src ~src_off dst ~dst_off ~len] copies [len] bytes from
     [src], starting at index [src_off], to byte sequence [dst], starting at
