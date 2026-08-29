@@ -7,6 +7,19 @@ open Bin_type
 type abs = Off.abs Off.t
 type rel = Off.rel Off.t
 
+type wmemo = Wm : ('a Witness.t * ('a -> S.t -> abs -> pos -> unit)) -> wmemo
+[@@unboxed]
+
+let rec wmemo_find : type a.
+    a Witness.t -> wmemo list -> (a -> S.t -> abs -> pos -> unit) option =
+ fun w -> function
+  | [] -> None
+  | Wm (w', fn) :: rest ->
+      begin match Witness.eq w' w with
+      | Some Witness.Refl -> Some fn
+      | None -> wmemo_find w rest
+      end
+
 [@@@ocamlformat "disable"]
 
 (* XXX(dinosaure): It's rather ugly, but it's necessary for performance. We need
@@ -309,6 +322,7 @@ and static_writer : type a. a t -> a swrite option =
    approach. *)
 let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
  fun root ->
+  let memo : wmemo list ref = ref [] in
   let rec go : type a. a t -> a -> S.t -> abs -> pos -> unit =
    fun t ->
     match t with
@@ -338,6 +352,18 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
           Bin_error.need_bytes ~limit ~offset ~need:w;
           (pos := Off.(offset +> w));
           wr v buf offset
+    | Fix r ->
+        begin match wmemo_find r.rwitn !memo with
+        | Some fn -> fn
+        | None ->
+            let cell = ref (fun _ _ _ _ -> assert false) in
+            let fn : a -> S.t -> abs -> pos -> unit =
+             fun v buf limit pos -> !cell v buf limit pos
+            in
+            memo := Wm (r.rwitn, fn) :: !memo;
+            cell := go (Lazy.force r.runroll);
+            fn
+        end
   and go_record : type a. a record -> a -> S.t -> abs -> pos -> unit =
    fun r ->
     let rname = if r.rname = "" then "record" else r.rname in

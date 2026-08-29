@@ -1,4 +1,4 @@
-type 'a s = Static of int | Dynamic of ('a -> int) | Unknown
+type 'a s = 'a Bin_type.s = Static of int | Dynamic of ('a -> int) | Unknown
 
 let size_to_option = function Static n -> Some n | _ -> None
 
@@ -19,7 +19,7 @@ let using : type a b. (b -> a) -> a s -> b s =
 
 module Len = Bin_type.Len
 
-type 'a t = { layout: Len.t option; of_value: 'a s }
+type 'a t = 'a Bin_type.size = { layout: Len.t option; of_value: 'a s }
 
 let static n = { layout= Some (Len.v n); of_value= Static n }
 let dynamic fn = { layout= None; of_value= Dynamic fn }
@@ -73,6 +73,7 @@ let rec make : type a. a Bin_type.t -> a t = function
       in
       head + tail
   | Seq s -> seq s
+  | Fix r -> fix r
 
 and seq : type a b. (a, b) Bin_type.seq -> b t =
  fun { slen; selt; skind } ->
@@ -214,3 +215,26 @@ and variant : type a. a Bin_type.variant -> a t =
         Dynamic (Bin_type.fold_variant { Bin_type.Case_folder.c0; c1 } v)
   in
   { layout; of_value }
+
+and fix : type a. a Bin_type.fix -> a t =
+ fun r ->
+  match r.rsizer with
+  | Some s -> s
+  | None ->
+      let fn = ref (fun (_ : a) -> 0) in
+      let indirect = { layout= None; of_value= Dynamic (fun v -> !fn v) } in
+      r.rsizer <- Some indirect;
+      let inner = make (Lazy.force r.runroll) in
+      let () =
+        match inner.of_value with
+        | Static n -> fn := fun _ -> n
+        | Dynamic fn' -> fn := fn'
+        | Unknown -> ()
+      in
+      let result =
+        match inner.of_value with
+        | Unknown -> { layout= inner.layout; of_value= Unknown }
+        | _ -> { layout= inner.layout; of_value= indirect.of_value }
+      in
+      r.rsizer <- Some result;
+      result

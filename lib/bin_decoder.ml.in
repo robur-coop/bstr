@@ -28,6 +28,19 @@ type ('a, 'b) freaders =
 
 type 'a sread = S.t -> abs -> 'a
 
+type rmemo = Rm : ('a Witness.t * (S.t -> abs -> pos -> 'a)) -> rmemo
+[@@unboxed]
+
+let rec rmemo_find : type a.
+    a Witness.t -> rmemo list -> (S.t -> abs -> pos -> a) option =
+ fun w -> function
+  | [] -> None
+  | Rm (w', fn) :: rest ->
+      begin match Witness.eq w' w with
+      | Some Witness.Refl -> Some fn
+      | None -> rmemo_find w rest
+      end
+
 type _ static_operation =
   | Iu : { q: rel; lsh: int; rsh: int } -> int static_operation
   | Is : { q: rel; lsh: int; rsh: int } -> int static_operation
@@ -619,6 +632,7 @@ let static_record_plan : type a. a record -> a sread option =
 
 let rec reader : type a. a t -> S.t -> abs -> pos -> a =
  fun root ->
+  let memo : rmemo list ref = ref [] in
   let rec go : type a. a t -> S.t -> abs -> pos -> a =
    fun t ->
     match t with
@@ -647,6 +661,18 @@ let rec reader : type a. a t -> S.t -> abs -> pos -> a =
           Bin_error.need_bytes ~limit ~offset ~need:w;
           (pos := Off.(offset +> w));
           rd buf offset
+    | Fix r ->
+        begin match rmemo_find r.rwitn !memo with
+        | Some fn -> fn
+        | None ->
+            let cell = ref (fun _ _ _ -> assert false) in
+            let fn : S.t -> abs -> pos -> a =
+             fun buf limit pos -> !cell buf limit pos
+            in
+            memo := Rm (r.rwitn, fn) :: !memo;
+            cell := go (Lazy.force r.runroll);
+            fn
+        end
   and go_record : type a. a record -> S.t -> abs -> pos -> a =
    fun r ->
     let rname = if r.rname = "" then "record" else r.rname in

@@ -374,6 +374,10 @@ val sealb :
      * (('a, 'a) bit_fields -> string * 'b * ('c, 'b) bit_fields)
   -> 'c t
 
+(** {2:fix Fix point.} *)
+
+val fix : ('a t -> 'a t) -> 'a t
+
 (** {2:decoder Decoder.} *)
 
 val decode_bstr : 'a t -> (Bstr.t -> pos -> 'a) Staged.t

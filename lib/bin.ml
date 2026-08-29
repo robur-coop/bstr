@@ -219,3 +219,10 @@ let map x f g = Map { x; f; g; mwit= Witness.make () }
 let ( let+ ) (x, f, g) fn = fn (map x f g)
 let bind x f g = Bind { bx= x; bf= f; bg= g }
 let ( let* ) (x, f, g) fn = fn (bind x f g)
+
+(* fix *)
+
+let fix fn =
+  let rwitn = Witness.make () in
+  let rec r = { runroll= lazy (fn (Fix r)); rsizer= None; rwitn } in
+  Fix r

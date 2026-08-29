@@ -128,6 +128,9 @@ end = struct
     n
 end
 
+type 'a s = Static of int | Dynamic of ('a -> int) | Unknown
+type 'a size = { layout: Len.t option; of_value: 'a s }
+
 let[@inline] have ~limit ~offset = Off.(limit -- offset)
 
 type pos = Off.abs Off.t ref
@@ -143,6 +146,7 @@ type _ t =
   | Seq : ('a, 'b) seq -> 'b t
   | Bind : ('a, 'b) bind -> 'b t
   | Bits : 'a bits -> 'a t
+  | Fix : 'a fix -> 'a t
 
 and _ primary =
   | Char : char primary
@@ -226,6 +230,12 @@ and ('a, 'b) bit_field = {
 }
 
 and _ bit_kind = Bint : int bit_kind | Bbool : bool bit_kind
+
+and 'a fix = {
+    runroll: 'a t Lazy.t
+  ; mutable rsizer: 'a size option
+  ; rwitn: 'a Witness.t
+}
 
 type _ a_bit_field = Bit_field : ('a, 'b) bit_field -> 'a a_bit_field
 
