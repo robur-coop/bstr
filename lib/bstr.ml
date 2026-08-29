@@ -196,7 +196,9 @@ let memmove_mmaped src ~src_off dst ~dst_off ~len =
 let memchr src ~off ~len value =
   if len < 0 || off < 0 || off > Bigarray.Array1.dim src - len then
     invalid_arg "Bstr.memchr";
-  unsafe_memchr src off len (Char.code value)
+  match unsafe_memchr src off len (Char.code value) with
+  | -1 -> -1
+  | idx -> off + idx
 
 let memset src ~off ~len value =
   if len < 0 || off < 0 || off > Bigarray.Array1.dim src - len then
