@@ -227,11 +227,11 @@ val map : 'b t -> ('b -> 'a) -> ('a -> 'b) -> 'a t
     another by supplying coercions between them. *)
 
 val bind : 'a t -> ('a -> 'b t) -> ('b -> 'a) -> 'b t
-(** This combinator allows defining a representative of one type in tems of
-    the result of another by supplying coercions between them. *)
+(** This combinator allows defining a representative of one type in tems of the
+    result of another by supplying coercions between them. *)
 
-val ( let+ ) : ('a t * ('a -> 'b) * ('b -> 'a)) -> ('b t -> 'c) -> 'c
-val ( let* ) : ('a t * ('a -> 'b t) * ('b -> 'a)) -> ('b t -> 'c) -> 'c
+val ( let+ ) : 'a t * ('a -> 'b) * ('b -> 'a) -> ('b t -> 'c) -> 'c
+val ( let* ) : 'a t * ('a -> 'b t) * ('b -> 'a) -> ('b t -> 'c) -> 'c
 
 (* {2:records Records.}
 
@@ -343,6 +343,36 @@ val ( |~ ) :
 
 val sealv : ?tag:int t -> ('a, 'b, 'a -> 'a case_p) open_variant -> 'a t
 (** [sealv v] seals the open variant [v]. *)
+
+(** {2:bits Bits.} *)
+
+type ('a, 'b, 'c) open_bits
+type endianness = Big_endian | Little_endian | Native_endian
+type bit_order = Msb_first | Lsb_first
+type bits_base = B8 | B16 of endianness | B32 of endianness
+type ('a, 'b) bit_field
+type ('a, 'b) bit_fields
+
+val bits :
+     ?name:string
+  -> ?order:bit_order
+  -> 'a
+  -> 'b
+  -> 'a * bit_order * ('c -> string * 'b * 'c)
+
+val bit : ?name:string -> int -> ('a -> int) -> ('a, int) bit_field
+val flag : ?name:string -> ('a -> bool) -> ('a, bool) bit_field
+
+val ( |* ) :
+     bits_base * bit_order * (('c, 'd -> 'e) bit_fields -> 'f)
+  -> ('c, 'd) bit_field
+  -> bits_base * bit_order * (('c, 'e) bit_fields -> 'f)
+
+val sealb :
+     bits_base
+     * bit_order
+     * (('a, 'a) bit_fields -> string * 'b * ('c, 'b) bit_fields)
+  -> 'c t
 
 (** {2:decoder Decoder.} *)
 
