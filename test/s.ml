@@ -365,7 +365,28 @@ module Make (M : Slice.S) = struct
     eq (M.filter_map fn t) "ABDEF";
     check (List.of_seq (M.to_seq t) = List.of_seq (String.to_seq "abcdef"));
     check (List.of_seq (M.to_seqi t) = List.of_seq (String.to_seqi "abcdef"));
-    eq (M.of_seq (M.to_seq t)) "abcdef"
+    eq (M.of_seq (M.to_seq t)) "abcdef";
+    let b = bstr "abcdef" in
+    eq_bstr (M.map Char.uppercase_ascii t) (Bstr.map Char.uppercase_ascii b);
+    let fn idx chr = if idx land 1 = 0 then Char.uppercase_ascii chr else chr in
+    eq_bstr (M.mapi fn t) (Bstr.mapi fn b);
+    eq_bstr (M.filter sat t) (Bstr.filter sat b);
+    let fn chr = if chr = 'c' then None else Some (Char.uppercase_ascii chr) in
+    eq_bstr (M.filter_map fn t) (Bstr.filter_map fn b);
+    eq_bstr (M.append t t) (Bstr.append b b);
+    let fn acc chr = acc ^ String.make 1 chr in
+    check (String.equal (M.fold_left fn "" t) (Bstr.fold_left fn "" b));
+    let fn chr acc = acc ^ String.make 1 chr in
+    check (String.equal (M.fold_right fn t "") (Bstr.fold_right fn b ""));
+    check (M.exists sat t == Bstr.exists sat b);
+    check (M.exists (fun _ -> false) t == Bstr.exists (fun _ -> false) b);
+    check (String.equal (M.hex t) (Bstr.hex b));
+    check (M.hash t == Bstr.hash b);
+    let buf = Buffer.create 0x10 and buf' = Buffer.create 0x10 in
+    let fn buf idx chr = Buffer.add_string buf (strf "%d%c" idx chr) in
+    M.iteri (fn buf) t;
+    Bstr.iteri (fn buf') b;
+    check (String.equal (Buffer.contents buf) (Buffer.contents buf'))
 
   let test_copies name =
     let descr = {text|fill, blit and blit_{from,to}_*|text} in
@@ -447,7 +468,9 @@ module Make (M : Slice.S) = struct
         (M.take ~sat:(fun chr -> chr == 'a') t)
         (Bstr.take ~sat:(fun chr -> chr == 'a') b);
       check (String.equal (M.hex t) (string_hex str));
+      check (String.equal (M.hex t) (Bstr.hex b));
       check (M.hash t == M.hash (M.string str));
+      check (M.hash t == Bstr.hash b);
       eq (M.copy t) str;
       eq (M.of_seq (M.to_seq t)) str
     done;
