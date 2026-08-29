@@ -157,6 +157,7 @@ let bits_cells : type a. a bits -> (a -> int) array =
     | BF0 -> []
     | BF1 (field, rest) ->
         let shift, mask = layout.(!idx) in
+        incr idx;
         let name = field.bfname and width = field.bfwidth in
         let this : x -> int =
           match field.bfkind with
