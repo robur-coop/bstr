@@ -101,31 +101,67 @@ module Staged : sig
   val unstage : 'a t -> 'a
 end
 
-(** {2 Positions.}
+(** {2 Positions and lengths.}
 
-    Two parameters [_ Off.t] and [Len.t] are said to designate a valid range of
-    a buffer. [_ Off.t] is a non-negative number which can be relative to an
-    anchor or absolute. [Len.t] is also a non-negative number. From them and a
-    byte sequence, we can access each of the [Len.t] bytes via its index
-    [_ Off.t] in the sequence. Indexes start at [_ Off.t]. If it's an absolute
-    offset ([abs Off.t]), it start at [0] (see {!val:Off.zero}). If it's an
-    relative offset, you should use {!val:Off.at} to manipulate then an absolute
-    offset. *)
+    Decoding and encoding walk a buffer with a {b cursor}. The {!type:pos} given
+    to {!val:decode_bstr}, {!val:decode} and {!val:encode_bstr} is a reference
+    on the index of the next byte to read or to write, and each of these
+    functions advances it by what it consumed or produced. The same cursor can
+    therefore be used to chain several values:
+
+    {[
+    let dec = Bin.Staged.unstage (Bin.decode_bstr Bin.beuint16) in
+    let pos = ref Bin.Off.zero in
+    let a = dec buf pos in (* reads bytes 0 and 1, [pos] becomes 2 *)
+    let b = dec buf pos in (* reads bytes 2 and 3, [pos] becomes 4 *)
+    ...
+    ]}
+
+    Two distinct notions are involved, and they have distinct types so that they
+    cannot be mixed up: an {!type:Off.t} says {b where} a byte is, a
+    {!type:Len.t} says {b how many} bytes there are. Both are [private int]:
+    reading one back as an [int] is the free coercion [(x :> int)], while going
+    the other way is impossible by accident. *)
+
 module Off : sig
   type 'w t = private int
+  (** An index into a byte sequence, counted in bytes and never negative. The
+      parameter ['w] records {b what the index is counted from}. *)
+
   type abs
+  (** An {b absolute} index, counted from the first byte of the buffer. It
+      designates a byte on its own, so it is what one can read or write at. A
+      cursor is of this kind. *)
+
   type rel
+  (** A {b relative} index: a displacement, counted from somewhere else: in
+      practice from the beginning of the value being decoded. Describing a
+      format yields such displacements (the offset of a field within its record)
+      long before any buffer exists, so they designate nothing by themselves.
+      They become usable once added to an absolute index, and the parameter is
+      there to make sure that addition happens. *)
 
   val zero : 'w t
+  (** [zero] is [0]. It is both the first index of a buffer and the null
+      displacement, hence its two possible kinds: it is the value to start a
+      cursor with. *)
+
   val at : abs t -> rel t -> abs t
+  (** [at base delta] is the absolute index which sits [delta] bytes after
+      [base]. This is the only way to turn a displacement into an index one can
+      read at. *)
 end
 
 module Len : sig
   type t = private int
+  (** A number of bytes, never negative: the size of a field, the width of the
+      window a decoder is allowed to read within. *)
 end
 
 type pos = Off.abs Off.t ref
-(** A type to describe a position which falls within the range of a sequence. *)
+(** The cursor of a decoder or an encoder: the index of the next byte to read or
+    to write. Start it with [ref Off.zero] and read it back with
+    [(!pos :> int)]. *)
 
 type 'a t
 (** A type to describe a binary format. *)
@@ -223,15 +259,98 @@ val list : len -> 'a t -> 'a list t
     It returns an list. *)
 
 val map : 'b t -> ('b -> 'a) -> ('a -> 'b) -> 'a t
-(** This combinator allows defining a representative of one type in terms of
-    another by supplying coercions between them. *)
+(** [map t f g] describes a value of type ['a] {i via} the representation [t] of
+    another type ['b], by supplying the coercions between them: decoding reads a
+    ['b] with [t] and turns it into an ['a] with [f], encoding turns the ['a]
+    back into a ['b] with [g] and writes it with [t].
+
+    [f] and [g] must be inverse of each other, otherwise encoding a value then
+    decoding it does not give that value back.
+
+    {[
+    type kind = Query | Response
+
+    let kind =
+      map uint8
+        (function 0 -> Query | _ -> Response)
+        (function Query -> 0 | Response -> 1)
+    ]}
+
+    The shape of the encoding does not depend on the value: [map] is therefore
+    transparent for the decoder, which can still fuse it into its {i static}
+    path. Use it whenever it is enough — see {!val:bind} otherwise. *)
 
 val bind : 'a t -> ('a -> 'b t) -> ('b -> 'a) -> 'b t
-(** This combinator allows defining a representative of one type in tems of the
-    result of another by supplying coercions between them. *)
+(** [bind t prj inj] is like {!val:map}, except that the representation of what
+    remains {b depends on the value which was just read}. It is the combinator
+    for the formats where a header decides how the rest must be interpreted: a
+    length, a tag, a version number.
+
+    Decoding reads an ['a] with [t], then decodes the rest with [prj a].
+    Encoding is the mirror image and this is where [inj] comes in: from the
+    value to write, [inj] recovers the ['a] which describes it, [bind] writes
+    that ['a] with [t], and then writes the value itself with [prj (inj v)].
+    Without [inj], the encoder would have no way to know which header to emit.
+
+    [inj] must therefore agree with what [prj] accepts: for any value [v] that
+    [prj a] can decode, [inj v] must be [a]. Otherwise the header and the
+    payload disagree and the result cannot be decoded back.
+
+    Before reaching for [bind], check that a simpler combinator does not already
+    cover the case. A size in bytes is {!val:prefix} on {!val:bytes}, a number
+    of elements is {!val:prefix} on {!val:list} or {!val:seq}, a tag which
+    selects a constructor is a {!val:variant} sealed with {!val:sealv}, and a
+    format which refers to itself is {!val:fix}. [bind] is for what remains:
+    when the value which was read has to be {b computed with} to know what
+    follows.
+
+    Here is such a case, a payload whose length is given in 32-bit words (as the
+    {i IHL} of an IPv4 header or the {i data offset} of a TCP one).
+    {!val:prefix} cannot express it, since it would take the number for a count
+    of bytes:
+
+    {[
+    let payload =
+      bind uint8
+        (fun words -> bytes (fixed (words * 4)))
+        (fun payload -> String.length payload / 4)
+    ]}
+
+    {b Note} [prj] is called for {b every} value encoded or decoded, and the
+    representation it returns is interpreted on the fly. Unlike {!val:map},
+    [bind] therefore never takes part in the {i static} (fused) path of the
+    decoder, and {!val:size_of_value} can only be dynamic on it. Prefer
+    {!val:map} when the shape of the encoding does not depend on the value.
+
+    See {!val:fix} for a recursive format, where [bind] is what lets the
+    recursion stop on a value read from the input. *)
 
 val ( let+ ) : 'a t * ('a -> 'b) * ('b -> 'a) -> ('b t -> 'c) -> 'c
+(** [let+] is the binding operator of {!val:map}: [let+ t = (x, f, g) in expr]
+    is [let t = map x f g in expr].
+
+    {b Note} the identifier it binds is the {b representation} returned by
+    {!val:map} — {b not} a decoded value. Nothing is read nor written when this
+    runs; it only names an intermediate representation. *)
+
 val ( let* ) : 'a t * ('a -> 'b t) * ('b -> 'a) -> ('b t -> 'c) -> 'c
+(** [let*] is the binding operator of {!val:bind}: [let* t = (x, f, g) in expr]
+    is [let t = bind x f g in expr]. As with {!val:( let+ )}, [t] is the
+    representation, not a value.
+
+    It exists to keep a large {!val:bind} readable: name the two functions, then
+    assemble them.
+
+    {[
+    let payload =
+      let prj words = bytes (fixed (words * 4)) in
+      let inj payload = String.length payload / 4 in
+      let* t = (uint8, prj, inj) in
+      t
+    ]}
+
+    On a [bind] as small as this one the plain function reads just as well; see
+    {!val:fix} for the shape which motivates the operator. *)
 
 (* {2:records Records.}
 
@@ -377,13 +496,47 @@ val sealb :
 (** {2:fix Fix point.} *)
 
 val fix : ('a t -> 'a t) -> 'a t
+(** [fix @@ fun t -> ...] computes the fixpoint of the given function and runs
+    the resultant codec. The argument that [fn] receives is the result of
+    [fix fn], which [fn] must use, paradoxically, to define [fix fn].
+
+    [fix] is useful when constructing codecs for inductively-defined types such
+    as sequences, trees, etc. Consider for example the codec of a {i QNAME} (see
+    RFC1035 § 4.1.2). They describe it as:
+
+    > a domain name represented as a sequence of labels, where each label
+    consists of a length octet followed by that number of octets. The domain
+    name terminates with the zero length octet for the null label of the root.
+
+    Here is the equivalent using [Bin]:
+
+    {[
+    type name = string list
+
+    let qname =
+      let open Bin in
+      fix @@ fun qname ->
+      let prj = function
+        | 0 -> const []
+        | len ->
+            record (fun label rest -> label :: rest)
+            |+ field (bytes (fixed len)) List.hd
+            |+ field qname List.tl
+            |> sealr
+      in
+      let inj = function [] -> 0 | label :: _ -> String.length label in
+      bind uint8 prj inj
+    ]} *)
 
 (** {2:decoder Decoder.} *)
 
 val decode_bstr : 'a t -> (Bstr.t -> pos -> 'a) Staged.t
-(** [decode_bstr repr] is the binary decoder for values of type [repr]. *)
+(** [decode_bstr repr] is the binary decoder for values of type [repr] on
+    {!type:Bstr.t}. *)
 
 val decode : 'a t -> (string -> pos -> 'a) Staged.t
+(** [decode repr] is the binary decoder for values of type [repr] on [string].
+*)
 
 (** {2:encoder Encoder.} *)
 
