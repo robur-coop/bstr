@@ -225,7 +225,8 @@ let rec compare_bytes a src_off b dst_off idx len =
     let x = Bytes.unsafe_get a (src_off + idx)
     and y = Bytes.unsafe_get b (dst_off + idx) in
     if x == y then compare_bytes a src_off b dst_off (idx + 1) len
-    else Char.compare x y
+    else if x < y then -1
+    else 1
 
 let rec compare_words a src_off b dst_off idx len =
   if idx + 8 > len then compare_bytes a src_off b dst_off idx len

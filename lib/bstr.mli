@@ -307,7 +307,9 @@ val memcmp : t -> src_off:int -> t -> dst_off:int -> len:int -> int
 (** [memcmp s1 ~src_off s2 ~dst_off ~len] compares the first [len] bytes of the
     memory areas [s1] (starting at [src_off]) and [s2] (starting at [dst_off]).
 
-    [memcmp] returns [0] is [s1] and [s2] don't match.
+    [memcmp] returns [0] if the given ranges of [s1] and [s2] match, [-1] if the
+    range of [s1] is lexicographically smaller than the one of [s2] and [1]
+    otherwise.
 
     @raise Invalid_argument
       if [src_off] and [len] do not designate a valid range of [src], or if

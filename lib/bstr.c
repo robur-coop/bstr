@@ -117,9 +117,10 @@ CAMLprim value bstr_bytecode_memmove(value src, value src_off, value dst,
 
 intnat bstr_native_memcmp(value s1, intnat s1_off, value s2, intnat s2_off,
                           intnat len) {
-  intnat res;
+  int res;
   res = memcmp(bstr_uint8_off(s1, s1_off), bstr_uint8_off(s2, s2_off), len);
-  return (res);
+  /* See s390x and its optimized version of [memcmp]. */
+  return ((res > 0) - (res < 0));
 }
 
 CAMLprim value bstr_bytecode_memcmp(value s1, value s1_off, value s2,

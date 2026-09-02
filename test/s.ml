@@ -218,6 +218,13 @@ module Make (M : Slice.S) = struct
     check (M.compare a (M.string "ab") == Bstr.compare (bstr "abc") (bstr "ab"));
     check
       (M.compare a (M.string "abcd") == Bstr.compare (bstr "abc") (bstr "abcd"));
+    check
+      (M.compare a (M.string "azc") == Bstr.compare (bstr "abc") (bstr "azc"));
+    check
+      (M.compare (M.string "azc") a == Bstr.compare (bstr "azc") (bstr "abc"));
+    check
+      (M.compare (M.string "0123456789") (M.string "012345678z")
+      == Bstr.compare (bstr "0123456789") (bstr "012345678z"));
     check (M.equal M.empty M.empty);
     both "hello, world" @@ fun t ->
     let b = bstr "hello, world" in
