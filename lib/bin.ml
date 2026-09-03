@@ -34,6 +34,23 @@ let encode_bstr t = Staged.stage (Bstr.encode t)
 let decode_bstr t = Staged.stage (Bstr.decode t)
 let decode t = Staged.stage (String.decode t)
 
+let encode t =
+  let wr = Bytes.encode t in
+  match (Bin_size.make t).Bin_size.of_value with
+  | Bin_size.Static len ->
+      Staged.stage @@ fun v ->
+      let buf = Stdlib.Bytes.create len in
+      wr v buf (ref Off.zero);
+      Stdlib.Bytes.unsafe_to_string buf
+  | Bin_size.Dynamic fn ->
+      Staged.stage @@ fun v ->
+      let len = fn v in
+      let buf = Stdlib.Bytes.create len in
+      wr v buf (ref Off.zero);
+      Stdlib.Bytes.unsafe_to_string buf
+  | Bin_size.Unknown ->
+      failwith "Impossible to infer the length of the given codec"
+
 let size_of_value t value =
   match (Size.make t).Size.of_value with
   | Size.Static len -> Some len

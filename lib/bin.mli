@@ -544,6 +544,7 @@ val decode : 'a t -> (string -> pos -> 'a) Staged.t
 (** {2:encoder Encoder.} *)
 
 val encode_bstr : 'a t -> ('a -> Bstr.t -> pos -> unit) Staged.t
+val encode : 'a t -> ('a -> string) Staged.t
 
 (** {2:size Size of representations.} *)
 
