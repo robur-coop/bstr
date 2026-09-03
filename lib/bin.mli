@@ -150,6 +150,9 @@ module Off : sig
   (** [at base delta] is the absolute index which sits [delta] bytes after
       [base]. This is the only way to turn a displacement into an index one can
       read at. *)
+
+  val v : int -> abs t
+  (** [v n] is a new absolute offset. *)
 end
 
 module Len : sig
