@@ -559,9 +559,7 @@ module Size : sig
       - [Static n]: all encodings produced by this codec have length [n];
       - [Dynamic fn]: the length of binary encodings is dependent on the
         specific value, but may be efficiently computed at run-time via the
-        function [fn];
-      - [Unknown]: this codec may produce encodings that cannot be efficiently
-        pre-computed. *)
+        function [fn] *)
   type 'a s = private Static of int | Dynamic of ('a -> int)
 
   type 'a t
