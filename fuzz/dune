@@ -1,5 +1,6 @@
 (executable
  (name fuzz)
+ (ocamlopt_flags (:standard -afl-instrument))
  (libraries crowbar bin))
 
 (rule
