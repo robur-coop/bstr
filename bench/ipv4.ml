@@ -217,30 +217,35 @@ let wire_ipv4 =
   let f_dst = Field.v "Dst" int32be in
   let open Codec in
   let fn vihl tos total_length id ff ttl protocol checksum src dst =
+    let vihl = UInt8.to_int vihl in
+    let ff = UInt16.to_int ff in
     {
       version= vihl lsr 4
     ; ihl= vihl land 0x0f
-    ; tos
-    ; total_length
-    ; id
+    ; tos= UInt8.to_int tos
+    ; total_length= UInt16.to_int total_length
+    ; id= UInt16.to_int id
     ; flags= ff lsr 13
     ; frag_offset= ff land 0x1fff
-    ; ttl
-    ; protocol
-    ; checksum
-    ; src= Stdlib.Int32.of_int src
-    ; dst= Stdlib.Int32.of_int dst
+    ; ttl= UInt8.to_int ttl
+    ; protocol= UInt8.to_int protocol
+    ; checksum= UInt16.to_int checksum
+    ; src= SInt32.to_int32 src
+    ; dst= SInt32.to_int32 dst
     }
   in
   v "IPv4" fn
     [
-      (f_vihl $ fun t -> (t.version lsl 4) lor t.ihl); (f_tos $ fun t -> t.tos)
-    ; (f_total_length $ fun t -> t.total_length); (f_id $ fun t -> t.id)
-    ; (f_flags $ fun t -> (t.flags lsl 13) lor t.frag_offset)
-    ; (f_ttl $ fun t -> t.ttl); (f_protocol $ fun t -> t.protocol)
-    ; (f_checksum $ fun t -> t.checksum)
-    ; (f_src $ fun t -> Stdlib.Int32.to_int t.src)
-    ; (f_dst $ fun t -> Stdlib.Int32.to_int t.dst)
+      (f_vihl $ fun t -> UInt8.v ((t.version lsl 4) lor t.ihl))
+    ; (f_tos $ fun t -> UInt8.v t.tos)
+    ; (f_total_length $ fun t -> UInt16.v t.total_length)
+    ; (f_id $ fun t -> UInt16.v t.id)
+    ; (f_flags $ fun t -> UInt16.v ((t.flags lsl 13) lor t.frag_offset))
+    ; (f_ttl $ fun t -> UInt8.v t.ttl)
+    ; (f_protocol $ fun t -> UInt8.v t.protocol)
+    ; (f_checksum $ fun t -> UInt16.v t.checksum)
+    ; (f_src $ fun t -> SInt32.of_int32 t.src)
+    ; (f_dst $ fun t -> SInt32.of_int32 t.dst)
     ]
 
 let wire_decode buf = Wire.Codec.decode_exn wire_ipv4 buf 0

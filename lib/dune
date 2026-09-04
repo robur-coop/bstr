@@ -87,6 +87,20 @@
    %{target})))
 
 (rule
+ (target bin_decoder_unrolled.ml.in)
+ (action
+  (run
+   ./../bin/branches.exe
+   -int
+   12
+   -static
+   4
+   -i
+   %{dep:bin_decoder.ml.in}
+   -o
+   %{target})))
+
+(rule
  (target bin_decoder_bstr.ml)
  (action
   (run
@@ -96,7 +110,7 @@
    -n
    Bin_bstr
    -i
-   %{dep:bin_decoder.ml.in}
+   %{dep:bin_decoder_unrolled.ml.in}
    -o
    %{target})))
 
@@ -124,6 +138,6 @@
    -n
    Bin_string
    -i
-   %{dep:bin_decoder.ml.in}
+   %{dep:bin_decoder_unrolled.ml.in}
    -o
    %{target})))
