@@ -34,7 +34,7 @@ let encode_bstr t = Staged.stage (Bstr.encode t)
 let decode_bstr t = Staged.stage (Bstr.decode t)
 let decode t = Staged.stage (String.decode t)
 
-let encode t =
+let to_string t =
   let wr = Bytes.encode t in
   match (Bin_size.make t).Bin_size.of_value with
   | Bin_size.Static len ->
@@ -48,14 +48,11 @@ let encode t =
       let buf = Stdlib.Bytes.create len in
       wr v buf (ref Off.zero);
       Stdlib.Bytes.unsafe_to_string buf
-  | Bin_size.Unknown ->
-      failwith "Impossible to infer the length of the given codec"
 
 let size_of_value t value =
   match (Size.make t).Size.of_value with
-  | Size.Static len -> Some len
-  | Size.Dynamic fn -> Some (fn value)
-  | Size.Unknown -> None
+  | Size.Static len -> len
+  | Size.Dynamic fn -> fn value
 
 let const v = Primary (Const v)
 let char = Primary Char

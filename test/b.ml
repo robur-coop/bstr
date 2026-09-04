@@ -270,10 +270,8 @@ let codec repr =
     let pos = ref Bin.Off.zero in
     enc value buf pos;
     let str = Bstr.sub_string buf ~off:0 ~len:(!pos :> int) in
-    begin match Bin.size_of_value repr value with
-    | Some len -> check (len == String.length str)
-    | None -> ()
-    end;
+    let len = Bin.size_of_value repr value in
+    check (len == String.length str);
     str
   in
   let decode str =

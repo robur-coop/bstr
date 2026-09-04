@@ -544,7 +544,12 @@ val decode : 'a t -> (string -> pos -> 'a) Staged.t
 (** {2:encoder Encoder.} *)
 
 val encode_bstr : 'a t -> ('a -> Bstr.t -> pos -> unit) Staged.t
-val encode : 'a t -> ('a -> string) Staged.t
+(** [encode_bstr repr] is the binary encoder for value of type [repr] on
+    {!type:Bstr.t}. *)
+
+val to_string : 'a t -> ('a -> string) Staged.t
+(** [to_string repr] is a function which returns the string representation of
+    values of type [repr]. *)
 
 (** {2:size Size of representations.} *)
 
@@ -557,11 +562,11 @@ module Size : sig
         function [fn];
       - [Unknown]: this codec may produce encodings that cannot be efficiently
         pre-computed. *)
-  type 'a s = private Static of int | Dynamic of ('a -> int) | Unknown
+  type 'a s = private Static of int | Dynamic of ('a -> int)
 
   type 'a t
 end
 
-val size_of_value : 'a t -> 'a -> int option
+val size_of_value : 'a t -> 'a -> int
 (** [size_of_value encoding value] attempts to calculate the number of bytes
     needed to encode the given [value] according to the given encoding. *)

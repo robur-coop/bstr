@@ -128,7 +128,7 @@ end = struct
     n
 end
 
-type 'a s = Static of int | Dynamic of ('a -> int) | Unknown
+type 'a s = Static of int | Dynamic of ('a -> int)
 type 'a size = { layout: Len.t option; of_value: 'a s }
 
 let[@inline] have ~limit ~offset = Off.(limit -- offset)

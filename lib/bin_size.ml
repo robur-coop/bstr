@@ -1,11 +1,10 @@
-type 'a s = 'a Bin_type.s = Static of int | Dynamic of ('a -> int) | Unknown
+module Len = Bin_type.Len
 
-let size_to_option = function Static n -> Some n | _ -> None
+type 'a s = 'a Bin_type.s = Static of int | Dynamic of ('a -> int)
 
 let add_size : type a. a s -> a s -> a s =
  fun a b ->
   match (a, b) with
-  | Unknown, _ | _, Unknown -> Unknown
   | Static a, Static b -> Static (a + b)
   | Static 0, x | x, Static 0 -> x
   | Static n, Dynamic fn | Dynamic fn, Static n -> Dynamic (fun v -> n + fn v)
@@ -13,17 +12,15 @@ let add_size : type a. a s -> a s -> a s =
 
 let using : type a b. (b -> a) -> a s -> b s =
  fun fn0 -> function
-  | Unknown -> Unknown
   | Static n -> Static n
   | Dynamic fn1 -> Dynamic (fun v -> fn1 (fn0 v))
 
-module Len = Bin_type.Len
+let size_to_option = function Static n -> Some n | _ -> None
 
 type 'a t = 'a Bin_type.size = { layout: Len.t option; of_value: 'a s }
 
 let static n = { layout= Some (Len.v n); of_value= Static n }
 let dynamic fn = { layout= None; of_value= Dynamic fn }
-let unknown = { layout= None; of_value= Unknown }
 
 let ( <+> ) : type a. a t -> a t -> a t =
  fun a b ->
@@ -61,15 +58,11 @@ let rec make : type a. a Bin_type.t -> a t = function
       dynamic @@ fun v ->
       let a = bg v in
       let head =
-        match sx with Static n -> n | Dynamic fn -> fn a | Unknown -> 0
+        match sx with Static n -> n | Dynamic fn -> fn a
         (* raise? *)
       in
       let tail =
-        match (make (bf a)).of_value with
-        | Static n -> n
-        | Dynamic fn -> fn v
-        | Unknown -> 0
-        (* raise? *)
+        match (make (bf a)).of_value with Static n -> n | Dynamic fn -> fn v
       in
       head + tail
   | Seq s -> seq s
@@ -85,7 +78,6 @@ and seq : type a b. (a, b) Bin_type.seq -> b t =
   let elt = make selt in
   let len : b s =
     match (slen, (make selt).of_value) with
-    | _, Unknown -> Unknown
     | Fixed k, Static n -> Static (k * n)
     | _, Static n -> Dynamic (fun v -> n * count v)
     | _, Dynamic fn ->
@@ -103,7 +95,6 @@ and seq : type a b. (a, b) Bin_type.seq -> b t =
         begin match (make t).of_value with
         | Static n -> add_size (Static n) len
         | Dynamic fn -> add_size (Dynamic (fun v -> fn (count v))) len
-        | Unknown -> Unknown
         end
   in
   let layout =
@@ -142,17 +133,13 @@ and payload : type a. Bin_type.len -> (a -> int) -> a t =
             fn n + n
           in
           dynamic fn
-      | Unknown -> unknown
       end
 
 and variant : type a. a Bin_type.variant -> a t =
  fun v ->
   let tag = make v.vtag in
   let tag_written v =
-    match tag.of_value with
-    | Static n -> Some n
-    | Dynamic fn -> Some (fn v)
-    | Unknown -> None
+    match tag.of_value with Static n -> n | Dynamic fn -> fn v
   in
   let cases =
     let fn = function
@@ -192,24 +179,18 @@ and variant : type a. a Bin_type.variant -> a t =
   let layout = uniform fn in
   let of_value =
     let fn (tw, _, pw, _) =
-      match (tw, pw) with
-      | Some t, Some p -> Some (t + p)
-      | Some _, None | None, Some _ | None, None -> None
+      match (tw, pw) with t, Some p -> Some (t + p) | _, None -> None
     in
     match uniform fn with
     | Some n -> Static n
     | None ->
-        let c0 { Bin_type.ctag0; _ } =
-          match tag_written ctag0 with Some n -> n | None -> 0
-        in
+        let c0 { Bin_type.ctag0; _ } = tag_written ctag0 in
         let c1 : type b. (a, b) Bin_type.case1 -> b -> int =
          fun c ->
-          let tag = match tag_written c.ctag1 with Some n -> n | None -> 0 in
+          let tag = tag_written c.ctag1 in
           let len = (make c.ctype1).of_value in
           fun v ->
-            let len =
-              match len with Static n -> n | Dynamic fn -> fn v | Unknown -> 0
-            in
+            let len = match len with Static n -> n | Dynamic fn -> fn v in
             tag + len
         in
         Dynamic (Bin_type.fold_variant { Bin_type.Case_folder.c0; c1 } v)
@@ -229,11 +210,9 @@ and fix : type a. a Bin_type.fix -> a t =
         match inner.of_value with
         | Static n -> fn := fun _ -> n
         | Dynamic fn' -> fn := fn'
-        | Unknown -> ()
       in
       let result =
         match inner.of_value with
-        | Unknown -> { layout= inner.layout; of_value= Unknown }
         | _ -> { layout= inner.layout; of_value= indirect.of_value }
       in
       r.rsizer <- Some result;
