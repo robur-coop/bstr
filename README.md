@@ -175,7 +175,7 @@ Here are the results when decoding an IPv4 packet:
 
 |      | bin         |    repr |  wire | data-encoding | handwritten | cstruct |
 |------|-------------|---------|-------|---------------|-------------|---------|
-| ipv4 | **17.40ns** | 94.87ns | 127ns |       139.2ns |     5.971ns | 11.66ns |
+| ipv4 | **11.9ns**  | 94.87ns | 196ns |       139.2ns |     5.971ns |  11.8ns |
 
 [^1]: `Bin` is currently being designed with this in mind.
 [^2]: Fusion involves loading an 8-byte word to extract several smaller pieces
