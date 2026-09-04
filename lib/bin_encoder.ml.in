@@ -34,6 +34,20 @@ let rec wmemo_find : type a.
       | None -> wmemo_find w rest
       end
 
+let[@inline never] invalid_window ~(offset : abs) ~len =
+  Format.kasprintf invalid_arg
+    "Bin.encode: the window of %d byte(s) at %d does not fit into the buffer"
+    len
+    (offset :> int)
+
+let[@inline] window ?len buf (offset : abs) =
+  match len with
+  | None -> Off.unsafe (S.length buf)
+  | Some len ->
+      if len < 0 || (offset :> int) + len > S.length buf then
+        invalid_window ~offset ~len;
+      Off.unsafe ((offset :> int) + len)
+
 [@@@ocamlformat "disable"]
 
 (* XXX(dinosaure): It's rather ugly, but it's necessary for performance. We need
@@ -579,11 +593,11 @@ let rec writer : type a. a t -> a -> S.t -> abs -> pos -> unit =
   in
   go root
 
-let encode : type a. a t -> a -> S.t -> pos -> unit =
+let encode : type a. a t -> a -> S.t -> ?len:int -> pos -> unit =
  fun t ->
   let generic () =
     let wr = writer t in
-    fun v buf pos -> wr v buf (Off.v (S.length buf)) pos
+    fun v buf ?len pos -> wr v buf (window ?len buf !pos) pos
   in
   match t with
   | Record r ->
@@ -592,9 +606,9 @@ let encode : type a. a t -> a -> S.t -> pos -> unit =
       with
       | Some n, Some cells ->
           let k = Array.length cells in
-          fun v buf pos ->
+          fun v buf ?len pos ->
             let offset = !pos in
-            let limit = Off.v (S.length buf) in
+            let limit = window ?len buf offset in
             if Off.(offset +> n > limit) then
               Bin_error.truncated ~offset ~need:n ~have:(have ~limit ~offset);
             for i = 0 to k - 1 do

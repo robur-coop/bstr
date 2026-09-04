@@ -53,9 +53,9 @@ let case_top ~ints ~statics =
   let buf = Buffer.create 0x100 in
   Buffer.add_string buf
     (Printf.sprintf "    | %s ->\n" (pattern ~ints ~statics));
-  Buffer.add_string buf "      fun buf pos ->\n";
+  Buffer.add_string buf "      fun buf ?len pos ->\n";
   Buffer.add_string buf "        let o = !pos in\n";
-  Buffer.add_string buf "        let limit = Off.unsafe (S.length buf) in\n";
+  Buffer.add_string buf "        let limit = window ?len buf o in\n";
   Buffer.add_string buf "        if Off.(o +> n > limit) then\n";
   Buffer.add_string buf
     "          truncated_in rname ~limit ~offset:o ~need:n;\n";

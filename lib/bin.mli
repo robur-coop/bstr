@@ -533,19 +533,48 @@ val fix : ('a t -> 'a t) -> 'a t
 
 (** {2:decoder Decoder.} *)
 
-val decode_bstr : 'a t -> (Bstr.t -> pos -> 'a) Staged.t
+val decode_bstr : 'a t -> (Bstr.t -> ?len:int -> pos -> 'a) Staged.t
 (** [decode_bstr repr] is the binary decoder for values of type [repr] on
-    {!type:Bstr.t}. *)
+    {!type:Bstr.t}.
 
-val decode : 'a t -> (string -> pos -> 'a) Staged.t
+    [len] is the {b window} the decoder is allowed to read within: [len] byte(s)
+    counted from the cursor. It defaults to the rest of the buffer, and it is
+    what {!val:rest} means and what bounds a {!val:delim} search. Such a window
+    is what a {i slice} describes, so decoding from one is:
+
+    {[
+      let decode = Bin.Staged.unstage (Bin.decode_bstr t) in
+      let { Slice.buf; off; len } = slice in
+      let pos = ref (Bin.Off.v off) in
+      let v = decode buf ~len pos in
+      ...
+    ]}
+
+    @raise Invalid_argument
+      if we try to manipulate something outside the given window.
+
+    {b NOTE}: that [len] is counted from the cursor, not from the beginning of
+    the buffer. *)
+
+val decode : 'a t -> (string -> ?len:int -> pos -> 'a) Staged.t
 (** [decode repr] is the binary decoder for values of type [repr] on [string].
-*)
+    [len] bounds the decoder as in {!val:decode_bstr}. *)
 
 (** {2:encoder Encoder.} *)
 
-val encode_bstr : 'a t -> ('a -> Bstr.t -> pos -> unit) Staged.t
+val encode_bstr : 'a t -> ('a -> Bstr.t -> ?len:int -> pos -> unit) Staged.t
 (** [encode_bstr repr] is the binary encoder for value of type [repr] on
-    {!type:Bstr.t}. *)
+    {!type:Bstr.t}. As for {!val:decode_bstr}, [len] is the window the encoder
+    is allowed to write within: [len] byte(s) counted from the cursor, the rest
+    of the buffer by default. Writing into a {i slice} is therefore:
+
+    {[
+    let encode = Bin.Staged.unstage (Bin.encode_bstr t) in
+    let { Slice.buf; off; len } = slice in
+    encode v buf ~len (ref (Bin.Off.v off))
+    ]}
+
+    @raise Invalid_argument if we try to write outside the given window. *)
 
 val to_string : 'a t -> ('a -> string) Staged.t
 (** [to_string repr] is a function which returns the string representation of

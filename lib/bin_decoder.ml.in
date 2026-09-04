@@ -114,6 +114,20 @@ let[@inline never] truncated_in rname ~limit ~offset ~need =
   try Bin_error.truncated ~offset ~need ~have:(have ~limit ~offset)
   with exn -> Bin_error.reraise_in rname exn
 
+let[@inline never] invalid_window ~(offset : abs) ~len =
+  Format.kasprintf invalid_arg
+    "Bin.decode: the window of %d byte(s) at %d does not fit into the buffer"
+    len
+    (offset :> int)
+
+let[@inline] window ?len buf (offset : abs) =
+  match len with
+  | None -> Off.unsafe (S.length buf)
+  | Some len ->
+      if len < 0 || (offset :> int) + len > S.length buf then
+        invalid_window ~offset ~len;
+      Off.unsafe ((offset :> int) + len)
+
 [@@@ocamlformat "disable"]
 
 let[@inline] readn (n : Len.t) get buf limit pos =
@@ -364,14 +378,14 @@ and static_slow : type a b. b -> (a, b) sreaders -> S.t -> abs -> a
       static_slow (ctor v) rest b o
 
 let static_apply_top : type a b.
-    b -> (a, b) sreaders -> Len.t -> string -> (S.t -> pos -> a)
+    b -> (a, b) sreaders -> Len.t -> string -> (S.t -> ?len:int -> pos -> a)
   = fun ctor rs n rname -> match rs with
 (* static_int_operation_top *)
     | rs ->
       let plan = static_apply ctor rs in
-      fun buf pos ->
+      fun buf ?len pos ->
         let offset = !pos in
-        let limit = Off.unsafe (S.length buf) in
+        let limit = window ?len buf offset in
         if Off.(offset +> n > limit)
         then truncated_in rname ~limit ~offset ~need:n;
         let v = plan buf offset in
@@ -1032,11 +1046,11 @@ let rec reader : type a. a t -> S.t -> abs -> pos -> a =
   in
   go root
 
-let decode : type a. a t -> S.t -> pos -> a =
+let decode : type a. a t -> S.t -> ?len:int -> pos -> a =
  fun t ->
   let generic () =
     let rd = reader t in
-    fun buf pos -> rd buf (Off.v (S.length buf)) pos
+    fun buf ?len pos -> rd buf (window ?len buf !pos) pos
   in
   match t with
   | Record r -> begin
@@ -1049,9 +1063,9 @@ let decode : type a. a t -> S.t -> pos -> a =
       | Some n, Some (Splan (ctor, rs), false) ->
           let rname = if r.rname = "" then "record" else r.rname in
           let plan = static_apply ctor rs in
-          fun buf pos ->
+          fun buf ?len pos ->
             let offset = !pos in
-            let limit = Off.unsafe (S.length buf) in
+            let limit = window ?len buf offset in
             let v =
               try
                 if Off.(offset +> n > limit) then
