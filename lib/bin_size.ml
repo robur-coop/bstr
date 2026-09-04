@@ -161,7 +161,7 @@ and variant : type a. a Bin_type.variant -> a t =
     let fn : a Bin_type.a_case -> _ = function
       | Bin_type.C0 { ctag0; _ } ->
           let len = tag_written ctag0 in
-          let next = Base len in
+          let next = Bin_type.Dispatch.Base len in
           ((len, tag.layout, Some 0, Some Len.zero), next)
       | C1 { ctag1; ctype1; cwitn1; _ } ->
           let p = make ctype1 in
@@ -172,8 +172,8 @@ and variant : type a. a Bin_type.variant -> a t =
             | Static n -> fun _ -> len0 + n
             | Dynamic fn -> fun v -> len0 + fn v
           in
-          let next = Arrow { arg_wit= cwit1; fn } in
-          (len0, tag.layout, len1, p.layout) next
+          let next = Bin_type.Dispatch.Arrow { arg_wit= cwitn1; fn } in
+          ((len0, tag.layout, len1, p.layout), next)
     in
     Array.map fn v.vcases
   in
@@ -207,15 +207,18 @@ and variant : type a. a Bin_type.variant -> a t =
     match uniform fn with
     | Some n -> Static n
     | None ->
-        let dispatch = Array.map snd cases in
+        let t = Array.map snd cases in
         let fn x =
           match v.vget x with
           | Bin_type.CV0 { ctag0; _ } ->
-              let[@warning "-8"] (Base len) = dispatch.(ctag0) in
+              let[@warning "-8"] (Bin_type.Dispatch.Base len) = t.(ctag0) in
               len
           | Bin_type.CV1 ({ ctag1; cwitn1; _ }, x) ->
-              let[@warning "-8"] (Arrow { arg_wit; fn }) = dispatch arg_wit x in
-              fn (Witness.caset_exn cwitn1 arg_wit x)
+              begin match t.(ctag1) with
+              | Bin_type.Dispatch.Arrow { arg_wit; fn } ->
+                  fn (Bin_type.Witness.cast_exn cwitn1 arg_wit x)
+              | Base _ -> assert false
+              end
         in
         Dynamic fn
   in
