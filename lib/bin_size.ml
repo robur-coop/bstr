@@ -158,15 +158,22 @@ and variant : type a. a Bin_type.variant -> a t =
     match tag.of_value with Static n -> n | Dynamic fn -> fn v
   in
   let cases =
-    let fn = function
+    let fn : a Bin_type.a_case -> _ = function
       | Bin_type.C0 { ctag0; _ } ->
           let len = tag_written ctag0 in
-          (len, tag.layout, Some 0, Some Len.zero)
-      | C1 { ctag1; ctype1; _ } ->
+          let next = Base len in
+          ((len, tag.layout, Some 0, Some Len.zero), next)
+      | C1 { ctag1; ctype1; cwitn1; _ } ->
           let p = make ctype1 in
           let len0 = tag_written ctag1 in
           let len1 = size_to_option p.of_value in
-          (len0, tag.layout, len1, p.layout)
+          let fn =
+            match p.of_value with
+            | Static n -> fun _ -> len0 + n
+            | Dynamic fn -> fun v -> len0 + fn v
+          in
+          let next = Arrow { arg_wit= cwit1; fn } in
+          (len0, tag.layout, len1, p.layout) next
     in
     Array.map fn v.vcases
   in
@@ -174,7 +181,7 @@ and variant : type a. a Bin_type.variant -> a t =
     let exception Not_uniform in
     try
       let acc = ref None in
-      let fn case =
+      let fn (case, _) =
         match pick case with
         | None -> raise_notrace Not_uniform
         | Some total ->
@@ -200,16 +207,17 @@ and variant : type a. a Bin_type.variant -> a t =
     match uniform fn with
     | Some n -> Static n
     | None ->
-        let c0 { Bin_type.ctag0; _ } = tag_written ctag0 in
-        let c1 : type b. (a, b) Bin_type.case1 -> b -> int =
-         fun c ->
-          let tag = tag_written c.ctag1 in
-          let len = (make c.ctype1).of_value in
-          fun v ->
-            let len = match len with Static n -> n | Dynamic fn -> fn v in
-            tag + len
+        let dispatch = Array.map snd cases in
+        let fn x =
+          match v.vget x with
+          | Bin_type.CV0 { ctag0; _ } ->
+              let[@warning "-8"] (Base len) = dispatch.(ctag0) in
+              len
+          | Bin_type.CV1 ({ ctag1; cwitn1; _ }, x) ->
+              let[@warning "-8"] (Arrow { arg_wit; fn }) = dispatch arg_wit x in
+              fn (Witness.caset_exn cwitn1 arg_wit x)
         in
-        Dynamic (Bin_type.fold_variant { Bin_type.Case_folder.c0; c1 } v)
+        Dynamic fn
   in
   { layout; of_value }
 
