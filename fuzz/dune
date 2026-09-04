@@ -1,9 +1,25 @@
 (executable
  (name fuzz)
- (libraries crowbar bin))
+ (modules fuzz)
+ (ocamlopt_flags
+  (:standard -afl-instrument))
+ (libraries crowbar bstr bin))
+
+(executable
+ (name iso)
+ (modules iso)
+ (ocamlopt_flags
+  (:standard -afl-instrument))
+ (libraries crowbar bstr bin))
 
 (rule
  (alias runtest)
  (package bin)
  (action
   (run ./fuzz.exe)))
+
+(rule
+ (alias runtest)
+ (package bin)
+ (action
+  (run ./iso.exe)))

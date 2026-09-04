@@ -1,11 +1,26 @@
-type 'a s = Static of int | Dynamic of ('a -> int) | Unknown
+(*
+ * Copyright (c) 2026 Romain Calascibetta <romain.calascibetta@gmail.com>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *)
 
-let size_to_option = function Static n -> Some n | _ -> None
+module Len = Bin_type.Len
+
+type 'a s = 'a Bin_type.s = Static of int | Dynamic of ('a -> int)
 
 let add_size : type a. a s -> a s -> a s =
  fun a b ->
   match (a, b) with
-  | Unknown, _ | _, Unknown -> Unknown
   | Static a, Static b -> Static (a + b)
   | Static 0, x | x, Static 0 -> x
   | Static n, Dynamic fn | Dynamic fn, Static n -> Dynamic (fun v -> n + fn v)
@@ -13,17 +28,15 @@ let add_size : type a. a s -> a s -> a s =
 
 let using : type a b. (b -> a) -> a s -> b s =
  fun fn0 -> function
-  | Unknown -> Unknown
   | Static n -> Static n
   | Dynamic fn1 -> Dynamic (fun v -> fn1 (fn0 v))
 
-module Len = Bin_type.Len
+let size_to_option = function Static n -> Some n | _ -> None
 
-type 'a t = { layout: Len.t option; of_value: 'a s }
+type 'a t = 'a Bin_type.size = { layout: Len.t option; of_value: 'a s }
 
 let static n = { layout= Some (Len.v n); of_value= Static n }
 let dynamic fn = { layout= None; of_value= Dynamic fn }
-let unknown = { layout= None; of_value= Unknown }
 
 let ( <+> ) : type a. a t -> a t -> a t =
  fun a b ->
@@ -53,7 +66,23 @@ let rec make : type a. a Bin_type.t -> a t = function
       List.fold_left fn (static 0) (Bin_type.record_fields r)
   | Variant v -> variant v
   | Map { x; g; _ } -> using g (make x)
+  | Bits { bbase= B8; _ } -> static 1
+  | Bits { bbase= B16 _; _ } -> static 2
+  | Bits { bbase= B32 _; _ } -> static 4
+  | Bind { bx; bf; bg } ->
+      let sx = (make bx).of_value in
+      dynamic @@ fun v ->
+      let a = bg v in
+      let head =
+        match sx with Static n -> n | Dynamic fn -> fn a
+        (* raise? *)
+      in
+      let tail =
+        match (make (bf a)).of_value with Static n -> n | Dynamic fn -> fn v
+      in
+      head + tail
   | Seq s -> seq s
+  | Fix r -> fix r
 
 and seq : type a b. (a, b) Bin_type.seq -> b t =
  fun { slen; selt; skind } ->
@@ -64,8 +93,7 @@ and seq : type a b. (a, b) Bin_type.seq -> b t =
   in
   let elt = make selt in
   let len : b s =
-    match (slen, (make selt).of_value) with
-    | _, Unknown -> Unknown
+    match (slen, elt.of_value) with
     | Fixed k, Static n -> Static (k * n)
     | _, Static n -> Dynamic (fun v -> n * count v)
     | _, Dynamic fn ->
@@ -83,7 +111,6 @@ and seq : type a b. (a, b) Bin_type.seq -> b t =
         begin match (make t).of_value with
         | Static n -> add_size (Static n) len
         | Dynamic fn -> add_size (Dynamic (fun v -> fn (count v))) len
-        | Unknown -> Unknown
         end
   in
   let layout =
@@ -122,28 +149,31 @@ and payload : type a. Bin_type.len -> (a -> int) -> a t =
             fn n + n
           in
           dynamic fn
-      | Unknown -> unknown
       end
 
 and variant : type a. a Bin_type.variant -> a t =
  fun v ->
   let tag = make v.vtag in
   let tag_written v =
-    match tag.of_value with
-    | Static n -> Some n
-    | Dynamic fn -> Some (fn v)
-    | Unknown -> None
+    match tag.of_value with Static n -> n | Dynamic fn -> fn v
   in
   let cases =
-    let fn = function
+    let fn : a Bin_type.a_case -> _ = function
       | Bin_type.C0 { ctag0; _ } ->
           let len = tag_written ctag0 in
-          (len, tag.layout, Some 0, Some Len.zero)
-      | C1 { ctag1; ctype1; _ } ->
+          let next = Bin_type.Dispatch.Base len in
+          ((len, tag.layout, Some 0, Some Len.zero), next)
+      | C1 { ctag1; ctype1; cwitn1; _ } ->
           let p = make ctype1 in
           let len0 = tag_written ctag1 in
           let len1 = size_to_option p.of_value in
-          (len0, tag.layout, len1, p.layout)
+          let fn =
+            match p.of_value with
+            | Static n -> fun _ -> len0 + n
+            | Dynamic fn -> fun v -> len0 + fn v
+          in
+          let next = Bin_type.Dispatch.Arrow { arg_wit= cwitn1; fn } in
+          ((len0, tag.layout, len1, p.layout), next)
     in
     Array.map fn v.vcases
   in
@@ -151,7 +181,7 @@ and variant : type a. a Bin_type.variant -> a t =
     let exception Not_uniform in
     try
       let acc = ref None in
-      let fn case =
+      let fn (case, _) =
         match pick case with
         | None -> raise_notrace Not_uniform
         | Some total ->
@@ -172,26 +202,45 @@ and variant : type a. a Bin_type.variant -> a t =
   let layout = uniform fn in
   let of_value =
     let fn (tw, _, pw, _) =
-      match (tw, pw) with
-      | Some t, Some p -> Some (t + p)
-      | Some _, None | None, Some _ | None, None -> None
+      match (tw, pw) with t, Some p -> Some (t + p) | _, None -> None
     in
     match uniform fn with
     | Some n -> Static n
     | None ->
-        let c0 { Bin_type.ctag0; _ } =
-          match tag_written ctag0 with Some n -> n | None -> 0
+        let t = Array.map snd cases in
+        let fn x =
+          match v.vget x with
+          | Bin_type.CV0 { ctag0; _ } ->
+              let[@warning "-8"] (Bin_type.Dispatch.Base len) = t.(ctag0) in
+              len
+          | Bin_type.CV1 ({ ctag1; cwitn1; _ }, x) ->
+              begin match t.(ctag1) with
+              | Bin_type.Dispatch.Arrow { arg_wit; fn } ->
+                  fn (Bin_type.Witness.cast_exn cwitn1 arg_wit x)
+              | Base _ -> assert false
+              end
         in
-        let c1 : type b. (a, b) Bin_type.case1 -> b -> int =
-         fun c ->
-          let tag = match tag_written c.ctag1 with Some n -> n | None -> 0 in
-          let len = (make c.ctype1).of_value in
-          fun v ->
-            let len =
-              match len with Static n -> n | Dynamic fn -> fn v | Unknown -> 0
-            in
-            tag + len
-        in
-        Dynamic (Bin_type.fold_variant { Bin_type.Case_folder.c0; c1 } v)
+        Dynamic fn
   in
   { layout; of_value }
+
+and fix : type a. a Bin_type.fix -> a t =
+ fun r ->
+  match r.rsizer with
+  | Some s -> s
+  | None ->
+      let fn = ref (fun (_ : a) -> 0) in
+      let indirect = { layout= None; of_value= Dynamic (fun v -> !fn v) } in
+      r.rsizer <- Some indirect;
+      let inner = make (Lazy.force r.runroll) in
+      let () =
+        match inner.of_value with
+        | Static n -> fn := fun _ -> n
+        | Dynamic fn' -> fn := fn'
+      in
+      let result =
+        match inner.of_value with
+        | _ -> { layout= inner.layout; of_value= indirect.of_value }
+      in
+      r.rsizer <- Some result;
+      result

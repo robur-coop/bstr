@@ -1,3 +1,19 @@
+(*
+ * Copyright (c) 2026 Romain Calascibetta <romain.calascibetta@gmail.com>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *)
+
 open Bin_type
 
 (* NOTE(dinosaure): here are two tips for optimising how we decode a binary
@@ -28,6 +44,19 @@ type ('a, 'b) freaders =
 
 type 'a sread = S.t -> abs -> 'a
 
+type rmemo = Rm : ('a Witness.t * (S.t -> abs -> pos -> 'a)) -> rmemo
+[@@unboxed]
+
+let rec rmemo_find : type a.
+    a Witness.t -> rmemo list -> (S.t -> abs -> pos -> a) option =
+ fun w -> function
+  | [] -> None
+  | Rm (w', fn) :: rest ->
+      begin match Witness.eq w' w with
+      | Some Witness.Refl -> Some fn
+      | None -> rmemo_find w rest
+      end
+
 type _ static_operation =
   | Iu : { q: rel; lsh: int; rsh: int } -> int static_operation
   | Is : { q: rel; lsh: int; rsh: int } -> int static_operation
@@ -35,11 +64,26 @@ type _ static_operation =
   | Is_swap : { q: rel; lsh: int; rsh: int } -> int static_operation
   | I32raw : { q: rel; sh: int } -> int32 static_operation
   | I32swap : { q: rel; sh: int } -> int32 static_operation
+  | I64raw : rel -> int64 static_operation
+  | I64swap : rel -> int64 static_operation
   | Ofun : 'a sread -> 'a static_operation
+
+type int_operation = { iq: rel; ish: int; imask: int }
+
+let[@inline] int_exec buf offset iq ish imask =
+  let w = S.swap64 (S.unsafe_get_int64_ne buf (Off.at offset iq :> int)) in
+  Int64.to_int (Int64.shift_right_logical w ish) land imask
 
 type ('a, 'b) sreaders =
   | S0 : ('a, 'a) sreaders
   | S1 : 'b static_operation * ('a, 'c) sreaders -> ('a, 'b -> 'c) sreaders
+  | Sint : int_operation * ('a, 'c) sreaders -> ('a, int -> 'c) sreaders
+
+type 'a splan = Splan : 'b * ('a, 'b) sreaders -> 'a splan
+
+type ('a, 'b) wreaders =
+  | W0 : ('a, 'a) wreaders
+  | W1 : (int -> 'b) * ('a, 'c) wreaders -> ('a, 'b -> 'c) wreaders
 
 let[@inline] static_exec : type a. a static_operation -> S.t -> abs -> a =
  fun operation buf offset ->
@@ -62,7 +106,27 @@ let[@inline] static_exec : type a. a static_operation -> S.t -> abs -> a =
   | I32swap { q; sh } ->
       let w = S.swap64 (S.unsafe_get_int64_ne buf (Off.at offset q :> int)) in
       Int64.to_int32 (Int64.shift_right_logical w sh)
+  | I64raw q -> S.unsafe_get_int64_ne buf (Off.at offset q :> int)
+  | I64swap q -> S.swap64 (S.unsafe_get_int64_ne buf (Off.at offset q :> int))
   | Ofun fn -> fn buf offset
+
+let[@inline never] truncated_in rname ~limit ~offset ~need =
+  try Bin_error.truncated ~offset ~need ~have:(have ~limit ~offset)
+  with exn -> Bin_error.reraise_in rname exn
+
+let[@inline never] invalid_window ~(offset : abs) ~len =
+  Format.kasprintf invalid_arg
+    "Bin.decode: the window of %d byte(s) at %d does not fit into the buffer"
+    len
+    (offset :> int)
+
+let[@inline] window ?len buf (offset : abs) =
+  match len with
+  | None -> Off.unsafe (S.length buf)
+  | Some len ->
+      if len < 0 || (offset :> int) + len > S.length buf then
+        invalid_window ~offset ~len;
+      Off.unsafe ((offset :> int) + len)
 
 [@@@ocamlformat "disable"]
 
@@ -299,6 +363,7 @@ let rec static_apply : type a b. b -> (a, b) sreaders -> a sread
         let v11 = static_exec r11 b o in
         let v12 = static_exec r12 b o in
         ctor v1 v2 v3 v4 v5 v6 v7 v8 v9 v10 v11 v12
+(* static_int_operation *)
     | rs -> fun b o -> static_slow ctor rs b o
 
 and static_slow : type a b. b -> (a, b) sreaders -> S.t -> abs -> a
@@ -308,6 +373,53 @@ and static_slow : type a b. b -> (a, b) sreaders -> S.t -> abs -> a
     | S1 (r, rest) ->
       let v = static_exec r b o in
       static_slow (ctor v) rest b o
+    | Sint ({ iq; ish; imask }, rest) ->
+      let v = int_exec b o iq ish imask in
+      static_slow (ctor v) rest b o
+
+let static_apply_top : type a b.
+    b -> (a, b) sreaders -> Len.t -> string -> (S.t -> ?len:int -> pos -> a)
+  = fun ctor rs n rname -> match rs with
+(* static_int_operation_top *)
+    | rs ->
+      let plan = static_apply ctor rs in
+      fun buf ?len pos ->
+        let offset = !pos in
+        let limit = window ?len buf offset in
+        if Off.(offset +> n > limit)
+        then truncated_in rname ~limit ~offset ~need:n;
+        let v = plan buf offset in
+        pos := Off.(offset +> n);
+        v
+
+let rec wapply : type a b. b -> (a, b) wreaders -> int -> a =
+  fun ctor rs ->
+    match rs with
+    | W0 ->
+      fun _ -> ctor
+    | W1 (r1, W0) ->
+      fun w -> ctor (r1 w)
+    | W1 (r1, W1 (r2, W0)) ->
+      fun w -> ctor (r1 w) (r2 w)
+    | W1 (r1, W1 (r2, W1 (r3, W0))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w)
+    | W1 (r1, W1 (r2, W1 (r3, W1 (r4, W0)))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w) (r4 w)
+    | W1 (r1, W1 (r2, W1 (r3, W1 (r4, W1 (r5, W0))))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w) (r4 w) (r5 w)
+    | W1 (r1, W1 (r2, W1 (r3, W1 (r4, W1 (r5, W1 (r6, W0)))))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w) (r4 w) (r5 w) (r6 w)
+    | W1 (r1, W1 (r2, W1 (r3, W1 (r4, W1 (r5, W1 (r6, W1 (r7, W0))))))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w) (r4 w) (r5 w) (r6 w) (r7 w)
+    | W1 (r1, W1 (r2, W1 (r3, W1 (r4, W1 (r5, W1 (r6, W1 (r7, W1 (r8, W0)))))))) ->
+      fun w -> ctor (r1 w) (r2 w) (r3 w) (r4 w) (r5 w) (r6 w) (r7 w) (r8 w)
+    | rs -> fun w -> wapply_slow ctor rs w
+
+and wapply_slow : type a b. b -> (a, b) wreaders -> int -> a =
+  fun ctor rs w ->
+    match rs with
+    | W0 -> ctor
+    | W1 (r, rest) -> wapply_slow (ctor (r w)) rest w
 [@@@ocamlformat "enable"]
 
 let read_varint buf limit pos =
@@ -324,6 +436,88 @@ let read_varint buf limit pos =
       Bin_error.out_of_range ~offset:start ~kind:"varint" ~value:"overflow"
   done;
   !res
+
+let int_operation_at ~(win : Len.t) ~(delta : rel) ~(w : Len.t) ~big =
+  let win = Len.to_int win and delta = Off.to_int delta and w = Len.to_int w in
+  if win < 8 || delta + w > win then None
+  else
+    let big = if w = 1 then not Sys.big_endian else big in
+    if big = Sys.big_endian then None
+    else
+      let q = if delta <= win - 8 then delta else win - 8 in
+      let j = delta - q in
+      let sh = if big then 8 * (8 - j - w) else 8 * j in
+      Some { iq= Off.unsafe q; ish= sh; imask= (1 lsl (8 * w)) - 1 }
+
+type _ int_operation_w = Int_operation : int_operation -> int int_operation_w
+
+let int_operation_reader_at : type a.
+    win:Len.t -> rel -> a t -> a int_operation_w option =
+ fun ~win delta t ->
+  let w = function Some v -> Some (Int_operation v) | None -> None in
+  let big_endian = function
+    | Big_endian -> true
+    | Little_endian -> false
+    | Native_endian -> Sys.big_endian
+  in
+  match t with
+  | Primary UInt8 -> w (int_operation_at ~win ~delta ~w:Len.one ~big:true)
+  | Primary (UInt16 e) ->
+      w (int_operation_at ~win ~delta ~w:(Len.unsafe 2) ~big:(big_endian e))
+  | _ -> None
+
+let bits_reader_at : type a. rel -> a bits -> a sread =
+ fun delta b ->
+  let extract =
+    match b.bfields with
+    | BFields (fs, ctor) ->
+        let layout = bits_layout b in
+        let idx = ref 0 in
+        let rec build : type x y. (x, y) bit_fields -> (x, y) wreaders =
+          function
+          | BF0 -> W0
+          | BF1 (field, rest) ->
+              let shift, mask = layout.(!idx) in
+              incr idx;
+              let this : type z. z bit_kind -> int -> z = function
+                | Bint -> fun w -> (w lsr shift) land mask
+                | Bbool -> fun w -> (w lsr shift) land mask <> 0
+              in
+              let this = this field.bfkind in
+              W1 (this, build rest)
+        in
+        wapply ctor (build fs)
+  in
+  match b.bbase with
+  | B8 ->
+      fun buf offset ->
+        extract (S.unsafe_get_uint8 buf (Off.at offset delta :> int))
+  | B16 Big_endian ->
+      fun buf offset ->
+        extract (S.unsafe_get_uint16_be buf (Off.at offset delta :> int))
+  | B16 Little_endian ->
+      fun buf offset ->
+        extract (S.unsafe_get_uint16_le buf (Off.at offset delta :> int))
+  | B16 Native_endian ->
+      fun buf offset ->
+        extract (S.unsafe_get_uint16_ne buf (Off.at offset delta :> int))
+  | B32 Big_endian ->
+      fun buf offset ->
+        extract
+          (Int32.to_int
+             (S.unsafe_get_int32_be buf (Off.at offset delta :> int)))
+  | B32 Little_endian ->
+      fun buf offset ->
+        extract
+          (Int32.to_int
+             (S.unsafe_get_int32_le buf (Off.at offset delta :> int)))
+  | B32 Native_endian ->
+      fun buf offset ->
+        extract
+          (Int32.to_int
+             (S.unsafe_get_int32_ne buf (Off.at offset delta :> int)))
+
+let bits_reader : type a. a bits -> a sread = fun b -> bits_reader_at Off.zero b
 
 let narrow ~(win : Len.t) ~(delta : rel) ~(w : Len.t) ~signed ~big ~fallback =
   let win = Len.to_int win and delta = Off.to_int delta and w = Len.to_int w in
@@ -356,30 +550,39 @@ let narrow32 ~(win : Len.t) ~delta:(q : rel) ~big ~fallback =
     let q = Off.unsafe q in
     if big <> Sys.big_endian then I32swap { q; sh } else I32raw { q; sh }
 
+let narrow64 ~(win : Len.t) ~(delta : rel) ~big ~fallback =
+  let win = (win :> int) and delta = (delta :> int) in
+  if win < 8 || delta + 8 > win then Ofun fallback
+  else
+    let q = Off.unsafe delta in
+    if big <> Sys.big_endian then I64swap q else I64raw q
+
 let rec static_reader_at : type a.
-    win:Len.t -> rel -> a t -> a static_operation option =
- fun ~win delta t ->
+    total:bool ref -> win:Len.t -> rel -> a t -> a static_operation option =
+ fun ~total ~win delta t ->
   match t with
   | Primary p -> static_primary_at ~win delta p
   | Map { x; f; _ } ->
-      begin match static_reader_at ~win delta x with
+      begin match static_reader_at ~total ~win delta x with
       | Some operation ->
+          total := false;
           Some (Ofun (fun buf offset -> f (static_exec operation buf offset)))
       | None -> None
       end
   | Record r ->
-      begin match static_record_at ~win delta r with
-      | Some rd -> Some (Ofun rd)
+      begin match static_record_at ~total ~win delta r with
+      | Some (Splan (ctor, rs)) -> Some (Ofun (static_apply ctor rs))
       | None -> None
       end
   | Seq { slen= Fixed n; selt; skind } -> begin
       let len = (Bin_size.make selt).layout in
-      let operation = static_reader_at ~win:Len.zero Off.zero selt in
+      let operation = static_reader_at ~total ~win:Len.zero Off.zero selt in
       match (operation, len) with
       | Some operation, Some w ->
           Some (Ofun (static_seq ~delta ~n ~w operation skind))
       | _ -> None
     end
+  | Bits b -> Some (Ofun (bits_reader_at delta b))
   | _ -> None
 
 and static_seq : type a b.
@@ -421,6 +624,7 @@ and static_primary_at : type a.
     Some (narrow ~win ~delta ~w ~signed ~big ~fallback:fn)
   in
   let narrow32 ~big fn = Some (narrow32 ~win ~delta ~big ~fallback:fn) in
+  let narrow64 ~big fn = Some (narrow64 ~win ~delta ~big ~fallback:fn) in
   let big_endian = function
     | Big_endian -> true
     | Little_endian -> false
@@ -464,21 +668,15 @@ and static_primary_at : type a.
       in
       let fn buf offset = get buf (Off.at offset delta :> int) in
       narrow32 ~big:(big_endian endian) fn
-  | Int64 Big_endian ->
-      let fn buf offset =
-        S.unsafe_get_int64_be buf (Off.at offset delta :> int)
+  | Int64 endian ->
+      let get =
+        match endian with
+        | Big_endian -> S.unsafe_get_int64_be
+        | Little_endian -> S.unsafe_get_int64_le
+        | Native_endian -> S.unsafe_get_int64_ne
       in
-      Some (Ofun fn)
-  | Int64 Little_endian ->
-      let fn buf offset =
-        S.unsafe_get_int64_le buf (Off.at offset delta :> int)
-      in
-      Some (Ofun fn)
-  | Int64 Native_endian ->
-      let fn buf offset =
-        S.unsafe_get_int64_ne buf (Off.at offset delta :> int)
-      in
-      Some (Ofun fn)
+      let fn buf offset = get buf (Off.at offset delta :> int) in
+      narrow64 ~big:(big_endian endian) fn
   | Const v -> Some (Ofun (fun _ _ -> v))
   | Bytes (Fixed n) ->
       let fn buf offset =
@@ -492,40 +690,60 @@ and static_primary_at : type a.
       Some (Ofun fn)
   | Var_int | Until _ | Bytes _ | Bstr _ -> None
 
-and static_record_at : type a. win:Len.t -> rel -> a record -> a sread option =
- fun ~win delta r ->
+and static_record_at : type a.
+    total:bool ref -> win:Len.t -> rel -> a record -> a splan option =
+ fun ~total ~win delta r ->
   let exception Not_static in
   let (Fields (fs, ctor)) = r.rfields in
   let anchor = ref delta in
+  let run = ref true in
+  let advance ftype =
+    match (Bin_size.make ftype).layout with
+    | Some w -> anchor := Off.(!anchor +> w)
+    | None -> raise_notrace Not_static
+  in
   let rec build : type x y. (x, y) fields -> (x, y) sreaders = function
     | F0 -> S0
     | F1 (field, rest) ->
-        let this =
-          match static_reader_at ~win !anchor field.ftype with
-          | Some op -> op
-          | None -> raise_notrace Not_static
-        in
-        begin match (Bin_size.make field.ftype).layout with
-        | Some w -> anchor := Off.(!anchor +> w)
-        | None -> raise_notrace Not_static
-        end;
-        S1 (this, build rest)
+        begin match
+          if !run then int_operation_reader_at ~win !anchor field.ftype
+          else None
+        with
+        | Some (Int_operation v) ->
+            advance field.ftype;
+            Sint (v, build rest)
+        | None ->
+            run := false;
+            let this =
+              match static_reader_at ~total ~win !anchor field.ftype with
+              | Some v -> v
+              | None -> raise_notrace Not_static
+            in
+            advance field.ftype;
+            S1 (this, build rest)
+        end
   in
-  try Some (static_apply ctor (build fs)) with Not_static -> None
+  try Some (Splan (ctor, build fs)) with Not_static -> None
 
 (* NOTE(dinosaure): A plan is a "compiled" construct designed to optimise
    decoding. The idea is to construct the functions for each field and to
    "flatten" the record constructor using our hellish pattern-matching [apply],
    so that we no longer incur the cost of [caml_apply] on the latter. *)
 
-let static_record_plan : type a. a record -> a sread option =
+let static_record_plan : type a. a record -> (a splan * bool) option =
  fun r ->
   match (Bin_size.make (Record r)).layout with
-  | Some n -> static_record_at ~win:n Off.zero r
+  | Some n ->
+      let total = ref true in
+      begin match static_record_at ~total ~win:n Off.zero r with
+      | Some plan -> Some (plan, !total)
+      | None -> None
+      end
   | None -> None
 
-let reader : type a. a t -> S.t -> abs -> pos -> a =
+let rec reader : type a. a t -> S.t -> abs -> pos -> a =
  fun root ->
+  let memo : rmemo list ref = ref [] in
   let rec go : type a. a t -> S.t -> abs -> pos -> a =
    fun t ->
     match t with
@@ -536,12 +754,52 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
     | Map { x; f; _ } ->
         let rd = go x in
         fun buf limit pos -> f (rd buf limit pos)
+    | Bind { bx; bf; _ } ->
+        let rd = go bx in
+        fun buf limit pos ->
+          let a = rd buf limit pos in
+          reader (bf a) buf limit pos
+    | Bits b ->
+        let rd = bits_reader b in
+        let w =
+          match b.bbase with
+          | B8 -> Len.unsafe 1
+          | B16 _ -> Len.unsafe 2
+          | B32 _ -> Len.unsafe 4
+        in
+        fun buf limit pos ->
+          let offset = !pos in
+          Bin_error.need_bytes ~limit ~offset ~need:w;
+          (pos := Off.(offset +> w));
+          rd buf offset
+    | Fix r ->
+        begin match rmemo_find r.rwitn !memo with
+        | Some fn -> fn
+        | None ->
+            let cell = ref (fun _ _ _ -> assert false) in
+            let fn : S.t -> abs -> pos -> a =
+             fun buf limit pos -> !cell buf limit pos
+            in
+            memo := Rm (r.rwitn, fn) :: !memo;
+            cell := go (Lazy.force r.runroll);
+            fn
+        end
   and go_record : type a. a record -> S.t -> abs -> pos -> a =
    fun r ->
     let rname = if r.rname = "" then "record" else r.rname in
     let len = (Bin_size.make (Record r)).layout in
     match (len, static_record_plan r) with
-    | Some n, Some plan ->
+    | Some n, Some (Splan (ctor, rs), true) ->
+        let plan = static_apply ctor rs in
+        fun buf limit pos ->
+          let offset = !pos in
+          if Off.(offset +> n > limit) then
+            truncated_in rname ~limit ~offset ~need:n;
+          let v = plan buf offset in
+          (pos := Off.(offset +> n));
+          v
+    | Some n, Some (Splan (ctor, rs), false) ->
+        let plan = static_apply ctor rs in
         fun buf limit pos ->
           let offset = !pos in
           let v =
@@ -572,7 +830,10 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
                 end
                 else
                   let len = (Bin_size.make field.ftype).layout in
-                  let dec = static_reader_at ~win:Len.zero !delta field.ftype in
+                  let total = ref true in
+                  let dec =
+                    static_reader_at ~total ~win:Len.zero !delta field.ftype
+                  in
                   match (dec, len) with
                   | Some operation, Some w ->
                       (delta := Off.(!delta +> w));
@@ -785,22 +1046,26 @@ let reader : type a. a t -> S.t -> abs -> pos -> a =
   in
   go root
 
-let decode : type a. a t -> S.t -> pos -> a =
+let decode : type a. a t -> S.t -> ?len:int -> pos -> a =
  fun t ->
   let generic () =
     let rd = reader t in
-    fun buf pos -> rd buf (Off.v (S.length buf)) pos
+    fun buf ?len pos -> rd buf (window ?len buf !pos) pos
   in
   match t with
   | Record r -> begin
       let len = (Bin_size.make t).layout in
       let plan = static_record_plan r in
       match (len, plan) with
-      | Some n, Some plan ->
+      | Some n, Some (Splan (ctor, rs), true) ->
           let rname = if r.rname = "" then "record" else r.rname in
-          fun buf pos ->
+          static_apply_top ctor rs n rname
+      | Some n, Some (Splan (ctor, rs), false) ->
+          let rname = if r.rname = "" then "record" else r.rname in
+          let plan = static_apply ctor rs in
+          fun buf ?len pos ->
             let offset = !pos in
-            let limit = Off.unsafe (S.length buf) in
+            let limit = window ?len buf offset in
             let v =
               try
                 if Off.(offset +> n > limit) then

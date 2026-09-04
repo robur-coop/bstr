@@ -1,2 +1,7 @@
 (executable
- (name generate))
+ (name generate)
+ (modules generate))
+
+(executable
+ (name branches)
+ (modules branches))

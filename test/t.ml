@@ -1368,13 +1368,7 @@ let test77 =
   let from_list lst =
     Bstr.init (List.length lst) (Char.unsafe_chr % List.nth lst)
   in
-  let norm expect a b =
-    let result = Bstr.compare a b in
-    Format.eprintf ">>> res:%d\n%!" result;
-    if result == 0 then check (expect == 0)
-    else if result < 0 then check (expect == -1)
-    else check (expect == 1)
-  in
+  let norm expect a b = check (Bstr.compare a b == expect) in
   norm 0
     (from_list [ 1; 2; 3; -4; 127; -128 ])
     (from_list [ 1; 2; 3; -4; 127; -128 ]);
@@ -1385,7 +1379,12 @@ let test77 =
     (from_list [ 1; 2; 3; -4; 127; -128 ])
     (from_list [ 1; 2; 3; -4; 42; -128 ]);
   norm (-1) (from_list []) (from_list [ 1 ]);
-  norm 1 (from_list [ 1 ]) (from_list [])
+  norm 1 (from_list [ 1 ]) (from_list []);
+  norm (-1) (from_list [ 0 ]) (from_list [ 255 ]);
+  norm 1 (from_list [ 255 ]) (from_list [ 0 ]);
+  norm (-1)
+    (from_list [ 1; 2; 3; 4; 5; 6; 7; 8; 0 ])
+    (from_list [ 1; 2; 3; 4; 5; 6; 7; 8; 255 ])
 
 let test78 =
   let descr = {text|blit_from_bytes (error)|text} in

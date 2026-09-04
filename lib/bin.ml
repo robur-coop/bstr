@@ -17,6 +17,7 @@
 [@@@warning "-unused-field"]
 
 let invalid_argf fmt = Format.kasprintf invalid_arg fmt
+let strf fmt = Format.asprintf fmt
 
 include Bin_type
 module Size = Bin_size
@@ -33,11 +34,25 @@ let encode_bstr t = Staged.stage (Bstr.encode t)
 let decode_bstr t = Staged.stage (Bstr.decode t)
 let decode t = Staged.stage (String.decode t)
 
+let to_string t =
+  let wr = Bytes.encode t in
+  match (Bin_size.make t).Bin_size.of_value with
+  | Bin_size.Static len ->
+      Staged.stage @@ fun v ->
+      let buf = Stdlib.Bytes.create len in
+      wr v buf (ref Off.zero);
+      Stdlib.Bytes.unsafe_to_string buf
+  | Bin_size.Dynamic fn ->
+      Staged.stage @@ fun v ->
+      let len = fn v in
+      let buf = Stdlib.Bytes.create len in
+      wr v buf (ref Off.zero);
+      Stdlib.Bytes.unsafe_to_string buf
+
 let size_of_value t value =
   match (Size.make t).Size.of_value with
-  | Size.Static len -> Some len
-  | Size.Dynamic fn -> Some (fn value)
-  | Size.Unknown -> None
+  | Size.Static len -> len
+  | Size.Dynamic fn -> fn value
 
 let const v = Primary (Const v)
 let char = Primary Char
@@ -100,7 +115,7 @@ let sealr : type a b. (a, b, a) open_record -> a t =
      | F0 -> F0
      | F1 (field, fs) ->
          let field =
-           if field.fname = "" then { field with fname= "#" ^ string_of_int i }
+           if field.fname = "" then { field with fname= strf "#%d" i }
            else field
          in
          F1 (field, renumber (succ i) fs)
@@ -116,7 +131,7 @@ type ('a, 'b) case = int -> 'a a_case * 'b
 
 let case0 ?name ?tag c0 idx =
   let ctag0 = match tag with Some t -> t | None -> idx in
-  let default = "#" ^ string_of_int idx in
+  let default = strf "#%d" idx in
   let cname0 = Option.value ~default name in
   let c = { ctag0; cidx0= idx; cname0; c0 } in
   (C0 c, CV0 c)
@@ -125,7 +140,7 @@ let case1 : type a b.
     ?name:string -> ?tag:int -> b t -> (b -> a) -> (a, b -> a case_p) case =
  fun ?name ?tag ctype1 c1 idx ->
   let ctag1 = match tag with Some t -> t | None -> idx in
-  let default = "#" ^ string_of_int idx in
+  let default = strf "#%d" idx in
   let cname1 = Option.value ~default name in
   let cwitn1 : b Witness.t = Witness.make () in
   let c = { ctag1; cidx1= idx; cname1; ctype1; cwitn1; c1 } in
@@ -163,6 +178,65 @@ let sealv ?tag:(vtag = varint) v =
 
 let ( |~ ) = app
 
+type ('a, 'b, 'c) open_bits =
+  bits_base
+  * bit_order
+  * (('a, 'c) bit_fields -> string * 'b * ('a, 'b) bit_fields)
+
+type endianness = Bin_type.endianness =
+  | Big_endian
+  | Little_endian
+  | Native_endian
+
+type bit_order = Bin_type.bit_order = Msb_first | Lsb_first
+
+type bits_base = Bin_type.bits_base =
+  | B8
+  | B16 of endianness
+  | B32 of endianness
+
+let bits ?(name = "") ?(order = Msb_first) bbase c =
+  (bbase, order, fun fs -> (name, c, fs))
+
+let bit ?(name = "") bfwidth bfget =
+  if bfwidth <= 0 then invalid_arg "Bin.bit: width must be positive";
+  { bfname= name; bfwidth; bfget; bfkind= Bint }
+
+let flag ?(name = "") bfget = { bfname= name; bfwidth= 1; bfget; bfkind= Bbool }
+let ( |* ) (base, order, r) field = (base, order, fun fs -> r (BF1 (field, fs)))
+
+let sealb (bbase, border, r) =
+  let bname, c, fs = r BF0 in
+  let total = match bbase with B8 -> 8 | B16 _ -> 16 | B32 _ -> 32 in
+  let fn acc (Bit_field field) = acc + field.bfwidth in
+  let width = List.fold_left fn 0 (a_bit_fields fs) in
+  if width <> total then
+    invalid_argf
+      "Bin.sealb: bit fields add up to %d bit(s) but the base word holds %d"
+      width total;
+  let rec renumber : type x y. int -> (x, y) bit_fields -> (x, y) bit_fields =
+   fun i -> function
+     | BF0 -> BF0
+     | BF1 (field, fs) ->
+         let field =
+           match field with
+           | { bfname= ""; _ } -> { field with bfname= strf "#%d" i }
+           | _ -> field
+         in
+         BF1 (field, renumber (i + 1) fs)
+  in
+  Bits { bname; bbase; border; bfields= BFields (renumber 0 fs, c) }
+
 (* map *)
 
 let map x f g = Map { x; f; g; mwit= Witness.make () }
+let ( let+ ) (x, f, g) fn = fn (map x f g)
+let bind x f g = Bind { bx= x; bf= f; bg= g }
+let ( let* ) (x, f, g) fn = fn (bind x f g)
+
+(* fix *)
+
+let fix fn =
+  let rwitn = Witness.make () in
+  let rec r = { runroll= lazy (fn (Fix r)); rsizer= None; rwitn } in
+  Fix r
