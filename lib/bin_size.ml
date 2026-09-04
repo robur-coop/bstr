@@ -93,7 +93,7 @@ and seq : type a b. (a, b) Bin_type.seq -> b t =
   in
   let elt = make selt in
   let len : b s =
-    match (slen, (make selt).of_value) with
+    match (slen, elt.of_value) with
     | Fixed k, Static n -> Static (k * n)
     | _, Static n -> Dynamic (fun v -> n * count v)
     | _, Dynamic fn ->
