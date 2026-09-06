@@ -1,3 +1,16 @@
+### v0.1.0 (2026-09-04)
+
+- Add unsafe access to bigstrings (@dinosaure, [#13][13])
+- Use warning names instead of numbers (@hannesm, [#14][14])
+- Improve our slice library (@dinosaure, [#18][18])
+- Improve our bin library (@dinosaure, [#16][16] & [#17][17])
+
+[13]: https://git.robur.coop/robur/bstr/pulls/13
+[14]: https://git.robur.coop/robur/bstr/pulls/14
+[18]: https://git.robur.coop/robur/bstr/pulls/18
+[16]: https://git.robur.coop/robur/bstr/pulls/16
+[17]: https://git.robur.coop/robur/bstr/pulls/17
+
 ### v0.0.4 (2025-01-20)
 
 - Fix compilation of our C stubs (spotted by @hannesm, fixed by @dinosaure, [#10][10])
