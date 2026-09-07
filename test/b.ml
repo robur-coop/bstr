@@ -450,10 +450,38 @@ let test07 =
   check (String.length str == 33);
   check (decode str = empty)
 
+type sparse = Echo_reply of int | Unreachable of string | Source_quench
+
+let sparse =
+  let open Bin in
+  variant ~name:"sparse" (fun echo_reply unreachable source_quench -> function
+    | Echo_reply v -> echo_reply v
+    | Unreachable v -> unreachable v
+    | Source_quench -> source_quench)
+  |~ case1 ~name:"echo-reply" ~tag:0 beuint16 (fun v -> Echo_reply v)
+  |~ case1 ~name:"unreachable" ~tag:3 cstring (fun v -> Unreachable v)
+  |~ case0 ~name:"source-quench" ~tag:11 Source_quench
+  |> sealv ~tag:uint8
+
+let test08 =
+  let descr = {text|sparse tags|text} in
+  Test.test ~title:"test08" ~descr @@ fun () ->
+  let encode, decode = codec sparse in
+  let test value expected =
+    let str = encode value in
+    check (String.equal str expected);
+    check (decode expected = value)
+  in
+  test (Echo_reply 0x1234) "\000\018\052";
+  test (Unreachable "foo") "\003foo\000";
+  test Source_quench "\011"
+
 let ( / ) = Filename.concat
 
 let () =
-  let tests = [ test01; test02; test03; test04; test05; test06; test07 ] in
+  let tests =
+    [ test01; test02; test03; test04; test05; test06; test07; test08 ]
+  in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in
   let run idx test =
     Format.printf "test%03d: %!" (succ idx);

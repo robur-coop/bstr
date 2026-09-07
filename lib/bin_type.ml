@@ -313,13 +313,11 @@ let fold_variant : type a r. (a, r) Case_folder.t -> a variant -> a -> r =
   in
   fun v ->
     match v_typ.vget v with
-    | CV0 { ctag0; _ } ->
-        begin match cases.(ctag0) with
-        | Dispatch.Base x -> x
-        | _ -> assert false
-        end
-    | CV1 ({ ctag1; cwitn1; _ }, v) ->
-        begin match cases.(ctag1) with
+    | CV0 { cidx0; _ } ->
+        let[@warning "-8"] (Dispatch.Base x) = cases.(cidx0) in
+        x
+    | CV1 ({ cidx1; cwitn1; _ }, v) ->
+        begin match cases.(cidx1) with
         | Dispatch.Arrow { fn; arg_wit } ->
             let v = Witness.cast_exn cwitn1 arg_wit v in
             fn v
