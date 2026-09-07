@@ -210,11 +210,11 @@ and variant : type a. a Bin_type.variant -> a t =
         let t = Array.map snd cases in
         let fn x =
           match v.vget x with
-          | Bin_type.CV0 { ctag0; _ } ->
-              let[@warning "-8"] (Bin_type.Dispatch.Base len) = t.(ctag0) in
+          | Bin_type.CV0 { cidx0; _ } ->
+              let[@warning "-8"] (Bin_type.Dispatch.Base len) = t.(cidx0) in
               len
-          | Bin_type.CV1 ({ ctag1; cwitn1; _ }, x) ->
-              begin match t.(ctag1) with
+          | Bin_type.CV1 ({ cidx1; cwitn1; _ }, x) ->
+              begin match t.(cidx1) with
               | Bin_type.Dispatch.Arrow { arg_wit; fn } ->
                   fn (Bin_type.Witness.cast_exn cwitn1 arg_wit x)
               | Base _ -> assert false
