@@ -1,3 +1,9 @@
+### v0.1.1 (2026-09-07)
+
+- Fix our `cases` combinator (@dinosaure, [#20][20])
+
+[20]: https://git.robur.coop/robur/bstr/pulls/20
+
 ### v0.1.0 (2026-09-04)
 
 - Add unsafe access to bigstrings (@dinosaure, [#13][13])
