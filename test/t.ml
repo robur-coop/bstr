@@ -1511,7 +1511,101 @@ let test83 =
   eql (Bstr.cuts ~empty:true ~sep (s "1, 2, 3")) [ s "1"; s " 2"; s " 3" ];
   eql
     (Bstr.cuts ~empty:true ~sep (s ",1,2,,3,"))
-    [ e; s "1"; s "2"; e; s "3"; e ]
+    [ e; s "1"; s "2"; e; s "3"; e ];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep e) [ e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep e) [];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s ",")) [ e; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s ",")) [];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s ",,")) [ e; e; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s ",,")) [];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s ",,,")) [ e; e; e; e ];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "123")) [ s "123" ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "123")) [ s "123" ];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s ",123")) [ e; s "123" ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s ",123")) [ s "123" ];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "123,")) [ s "123"; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "123,")) [ s "123" ];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "1,2,3")) [ s "1"; s "2"; s "3" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:false ~sep (s "1,2,3"))
+    [ s "1"; s "2"; s "3" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:true ~sep (s "1, 2, 3"))
+    [ s "1"; s " 2"; s " 3" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:false ~sep (s "1, 2, 3"))
+    [ s "1"; s " 2"; s " 3" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:true ~sep (s ",1,2,,3,"))
+    [ e; s "1"; s "2"; e; s "3"; e ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:false ~sep (s ",1,2,,3,"))
+    [ s "1"; s "2"; s "3" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:true ~sep (s ", 1, 2,, 3,"))
+    [ e; s " 1"; s " 2"; e; s " 3"; e ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:false ~sep (s ", 1, 2,, 3,"))
+    [ s " 1"; s " 2"; s " 3" ];
+  let sep = "<>" in
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep e) [ e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep e) [];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "<>")) [ e; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "<>")) [];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "<><>")) [ e; e; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "<><>")) [];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "<><><>")) [ e; e; e; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "<><><>")) [];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "123")) [ s "123" ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "123")) [ s "123" ];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "<>123")) [ e; s "123" ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "<>123")) [ s "123" ];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "123<>")) [ s "123"; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "123<>")) [ s "123" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:true ~sep (s "1<>2<>3"))
+    [ s "1"; s "2"; s "3" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:false ~sep (s "1<>2<>3"))
+    [ s "1"; s "2"; s "3" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:true ~sep (s "1<> 2<> 3"))
+    [ s "1"; s " 2"; s " 3" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:false ~sep (s "1<> 2<> 3"))
+    [ s "1"; s " 2"; s " 3" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:true ~sep (s "<>1<>2<><>3<>"))
+    [ e; s "1"; s "2"; e; s "3"; e ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:false ~sep (s "<>1<>2<><>3<>"))
+    [ s "1"; s "2"; s "3" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:true ~sep (s "<> 1<> 2<><> 3<>"))
+    [ e; s " 1"; s " 2"; e; s " 3"; e ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:false ~sep (s "<> 1<> 2<><> 3<>"))
+    [ s " 1"; s " 2"; s " 3" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:true ~sep (s ">>><>>>><>>>><>>>>"))
+    [ s ">>>"; s ">>>"; s ">>>"; s ">>>" ];
+  eql
+    (Bstr.cuts ~rev:true ~empty:false ~sep (s ">>><>>>><>>>><>>>>"))
+    [ s ">>>"; s ">>>"; s ">>>"; s ">>>" ];
+  let sep = "<->" in
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "<->>->")) [ e; s ">->" ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "<->>->")) [ s ">->" ];
+  let sep = "aa" in
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "aa")) [ e; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "aa")) [];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "aaa")) [ s "a"; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "aaa")) [ s "a" ];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "aaaa")) [ e; e; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "aaaa")) [];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "aaaaa")) [ s "a"; e; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "aaaaa")) [ s "a" ];
+  eql (Bstr.cuts ~rev:true ~empty:true ~sep (s "aaaaaa")) [ e; e; e; e ];
+  eql (Bstr.cuts ~rev:true ~empty:false ~sep (s "aaaaaa")) []
 
 let test84 =
   let descr = {text|unsafe accessors and checked ones|text} in
@@ -1610,7 +1704,12 @@ let test85 =
   Bstr.set res 0 'z';
   eq bstr "abcdef";
   let res = Bstr.filter (fun _ -> true) bstr in
-  Bstr.set res 0 'z'; eq bstr "abcdef"
+  Bstr.set res 0 'z';
+  eq bstr "abcdef";
+  let s = Bstr.of_string in
+  let fn = function 'a' -> None | chr -> Some chr in
+  eq (Bstr.filter_map fn (s "banana")) "bnn";
+  eq (Bstr.filter_map (fun chr -> Some chr) (s "banana")) "banana"
 
 let ( / ) = Filename.concat
 
