@@ -64,35 +64,35 @@ let w_char delta get = (); fun v buf off ->
 [@@inline always]
 
 let w_ui8 delta get = (); fun v buf off ->
-  S.unsafe_set_uint8 buf (Off.at off delta :> int) (get v)
+  S.unsafe_set_uint8 buf (Off.at off delta :> int) (get v land 0xff)
 [@@inline always]
 
 let w_i8 delta get = (); fun v buf off ->
-  S.unsafe_set_int8 buf (Off.at off delta :> int) (get v)
+  S.unsafe_set_int8 buf (Off.at off delta :> int) (get v land 0xff)
 [@@inline always]
 
 let w_ui16_le delta get = (); fun v buf off ->
-  S.unsafe_set_uint16_le buf (Off.at off delta :> int) (get v)
+  S.unsafe_set_uint16_le buf (Off.at off delta :> int) (get v land 0xffff)
 [@@inline always]
 
 let w_ui16_be delta get = (); fun v buf off ->
-  S.unsafe_set_uint16_be buf (Off.at off delta :> int) (get v)
+  S.unsafe_set_uint16_be buf (Off.at off delta :> int) (get v land 0xffff)
 [@@inline always]
 
 let w_ui16_ne delta get = (); fun v buf off ->
-  S.unsafe_set_uint16_ne buf (Off.at off delta :> int) (get v)
+  S.unsafe_set_uint16_ne buf (Off.at off delta :> int) (get v land 0xffff)
 [@@inline always]
 
 let w_i16_le delta get = (); fun v buf off ->
-  S.unsafe_set_int16_le buf (Off.at off delta :> int) (get v)
+  S.unsafe_set_int16_le buf (Off.at off delta :> int) (get v land 0xffff)
 [@@inline always]
 
 let w_i16_be delta get = (); fun v buf off ->
-  S.unsafe_set_int16_be buf (Off.at off delta :> int) (get v)
+  S.unsafe_set_int16_be buf (Off.at off delta :> int) (get v land 0xffff)
 [@@inline always]
 
 let w_i16_ne delta get = (); fun v buf off ->
-  S.unsafe_set_int16_ne buf (Off.at off delta :> int) (get v)
+  S.unsafe_set_int16_ne buf (Off.at off delta :> int) (get v land 0xffff)
 [@@inline always]
 
 let w_i32_le delta get = (); fun v buf off ->
@@ -129,14 +129,14 @@ let[@inline always] w_1 set = (); fun v buf limit pos ->
   let offset = !pos in
   Bin_error.need_bytes ~limit ~offset ~need:Len.one;
   (pos := Off.(offset +> Len.one));
-  set buf (offset :> int) v
+  set buf (offset :> int) (v land 0xff)
 
 let[@inline always] w_2 set = (); fun v buf limit pos ->
   let _2 = Len.unsafe 2 in
   let offset = !pos in
   Bin_error.need_bytes ~limit ~offset ~need:_2;
   (pos := Off.(offset +> _2));
-  set buf (offset :> int) v
+  set buf (offset :> int) (v land 0xffff)
 
 let[@inline always] w_4 set = (); fun v buf limit pos ->
   let _4 = Len.unsafe 4 in
