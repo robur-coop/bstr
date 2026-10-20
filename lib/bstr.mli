@@ -740,3 +740,17 @@ val to_seqi : t -> (int * char) Seq.t
 
 val of_seq : char Seq.t -> t
 (** Create a bigstring from the generator. *)
+
+val to_hex_into : ?src_off:int -> ?len:int -> t -> ?dst_off:int -> bytes -> unit
+val to_hex : ?off:int -> ?len:int -> t -> string
+
+val of_hex_into :
+     ?skip_whitespace:bool
+  -> ?src_off:int
+  -> ?len:int
+  -> t
+  -> ?dst_off:int
+  -> bytes
+  -> unit
+
+val of_hex : ?skip_whitespace:bool -> ?off:int -> ?len:int -> t -> string
