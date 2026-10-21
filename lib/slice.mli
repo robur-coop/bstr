@@ -182,6 +182,10 @@ module type R = sig
   val to_seq : t -> char Seq.t
   val to_seqi : t -> (int * char) Seq.t
   val of_seq : char Seq.t -> t
+  val to_hex_into : t -> ?len:int -> ?dst_off:int -> bytes -> unit
+
+  val of_hex_into :
+    ?skip_whitespace:bool -> t -> ?len:int -> ?dst_off:int -> bytes -> unit
 end
 
 module type W = sig

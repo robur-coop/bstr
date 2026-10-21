@@ -778,3 +778,11 @@ let of_seq seq =
   let buf = Buffer.create 0x100 in
   Seq.iter (Buffer.add_char buf) seq;
   of_string (Buffer.contents buf)
+
+let to_hex_into slice ?len ?dst_off buf =
+  let { Slice.buf= t; off= src_off; _ } = slice in
+  S.to_hex_into ~src_off ?len t ?dst_off buf
+
+let of_hex_into ?skip_whitespace slice ?len ?dst_off buf =
+  let { Slice.buf= t; off= src_off; _ } = slice in
+  S.of_hex_into ?skip_whitespace ~src_off ?len t ?dst_off buf

@@ -248,3 +248,70 @@ let memcmp a ~src_off b ~dst_off ~len =
     || dst_off > Bytes.length b - len
   then invalid_arg "Bytes.memcmp";
   unsafe_memcmp a ~src_off b ~dst_off ~len
+
+let tab = "0123456789abcdef"
+
+let to_hex_into ?(src_off = 0) ?len t ?(dst_off = 0) buf =
+  let len = match len with Some len -> len | None -> length t - src_off in
+  if src_off < 0 || len < 0 || src_off > length t - len then
+    invalid_arg "Bstr.to_hex_into";
+  let dst_len = len * 2 in
+  if dst_off < 0 || Bytes.length buf - dst_off < dst_len then
+    invalid_arg "Bstr.to_hex_into";
+  let fn idx chr =
+    let hi, lo =
+      let value = int_of_char chr in
+      (tab.[value lsr 4], tab.[value land 0x0f])
+    in
+    Bytes.set buf ((idx * 2) + dst_off) hi;
+    Bytes.set buf ((idx * 2) + dst_off + 1) lo
+  in
+  for idx = 0 to len - 1 do
+    fn idx (unsafe_get t (src_off + idx))
+  done
+
+let digit = function
+  | '0' .. '9' as chr -> int_of_char chr - 0x30
+  | 'A' .. 'F' as chr -> int_of_char chr - 0x41 + 10
+  | 'a' .. 'f' as chr -> int_of_char chr - 0x61 + 10
+  | _ -> invalid_arg "bad character"
+
+let is_space = ( = ) ' '
+
+let req_length ?(src_off = 0) ?(skip_whitespace = true) t ~len =
+  let fn acc chr =
+    if skip_whitespace && is_space chr then acc
+    else begin
+      ignore (digit chr);
+      succ acc
+    end
+  in
+  let acc = ref 0 in
+  for idx = 0 to len - 1 do
+    acc := fn !acc (unsafe_get t (src_off + idx))
+  done;
+  let req = !acc in
+  if req mod 2 = 0 then req / 2 else invalid_arg "leftover byte in hex string"
+
+let of_hex_into ?(skip_whitespace = true) ?(src_off = 0) ?len t ?(dst_off = 0)
+    buf =
+  let len = match len with Some len -> len | None -> length t - src_off in
+  if src_off < 0 || len < 0 || src_off > length t - len then
+    invalid_arg "Bstr.of_hex_into";
+  let dst_len = req_length ~src_off ~skip_whitespace ~len t in
+  if dst_off < 0 || Bytes.length buf - dst_off < dst_len then
+    invalid_arg "Bstr.of_hex_into";
+  let leftover = ref None in
+  let dst_off = ref dst_off in
+  for idx = 0 to len - 1 do
+    let chr = unsafe_get t (src_off + idx) in
+    if not (skip_whitespace && is_space chr) then begin
+      let code = digit chr in
+      match !leftover with
+      | None -> leftover := Some (code lsl 4)
+      | Some code' ->
+          leftover := None;
+          Bytes.set_uint8 buf !dst_off (code' lor code);
+          incr dst_off
+    end
+  done
