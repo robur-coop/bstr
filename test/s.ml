@@ -506,7 +506,7 @@ module Make (M : Slice.S) = struct
   let test_random name =
     let descr = {text|comparison with Bstr on random inputs|text} in
     Test.test ~title:(name ^ "-random") ~descr @@ fun () ->
-    let g = Random.State.make [| 0xdeadbeef |] in
+    let g = Random.State.make [| 0x5eadbeef |] in
     let result = ref true in
     let check v = result := !result && v in
     let eq t str = result := !result && String.equal (M.to_string t) str in
