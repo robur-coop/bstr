@@ -272,7 +272,7 @@ CAMLprim value bstr_bytecode_unsafe_sub(value vbstr, value voff, value vlen) {
 
 uint64_t bstr_native_get64u(value va, intnat off) {
 #ifdef ARCH_ALIGN_INT64
-  char b0, b1, b2, b3, b4, b5, b6, b7;
+  unsigned char b0, b1, b2, b3, b4, b5, b6, b7;
 #endif
   struct caml_ba_array *a = Caml_ba_array_val(va);
   void *addr = &((unsigned char *)a->data)[off];
