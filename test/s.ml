@@ -435,6 +435,74 @@ module Make (M : Slice.S) = struct
     err (fun () -> M.blit_to_bytes src ~src_off:2 dst ~dst_off:0 ~len:5);
     err (fun () -> M.blit_to_bytes src ~src_off:0 dst ~dst_off:2 ~len:6)
 
+  let test_hex name =
+    let descr = {text|to_hex_into and of_hex_into|text} in
+    Test.test ~title:(name ^ "-hex") ~descr @@ fun () ->
+    let of_hex_with_dot ?skip_whitespace ?len t n =
+      let buf = Bytes.make n '.' in
+      M.of_hex_into ?skip_whitespace t ?len buf;
+      Bytes.to_string buf
+    in
+    let to_hex_with_dot ?len t n =
+      let buf = Bytes.make n '.' in
+      M.to_hex_into t ?len buf; Bytes.to_string buf
+    in
+    both "\x00\x0f\xff" (fun t -> check (M.to_hex t = "000fff"));
+    both "ABCD" (fun t ->
+        check (to_hex_with_dot t 8 = "41424344");
+        check (to_hex_with_dot ~len:2 t 8 = "4142....");
+        check (to_hex_with_dot ~len:0 t 2 = "..");
+        check (M.to_hex t = "41424344");
+        check (M.to_hex ~len:2 t = "4142");
+        check (M.to_hex ~len:0 t = "");
+        let buf = Bytes.make 12 '.' in
+        M.to_hex_into t ~dst_off:2 buf;
+        check (Bytes.to_string buf = "..41424344..");
+        err (fun () -> to_hex_with_dot t 7);
+        err (fun () -> to_hex_with_dot ~len:5 t 10);
+        err (fun () -> to_hex_with_dot ~len:(-1) t 8);
+        err (fun () -> M.to_hex ~len:5 t);
+        err (fun () -> M.to_hex ~len:(-1) t);
+        err (fun () -> M.to_hex_into t ~dst_off:5 buf);
+        err (fun () -> M.to_hex_into t ~dst_off:(-1) buf));
+    both "" (fun t -> check (M.to_hex t = ""));
+    both "41424344" (fun t ->
+        check (of_hex_with_dot t 4 = "ABCD");
+        check (of_hex_with_dot ~len:4 t 4 = "AB..");
+        check (of_hex_with_dot ~len:0 t 1 = ".");
+        check (M.of_hex t = "ABCD");
+        check (M.of_hex ~len:4 t = "AB");
+        check (M.of_hex ~len:0 t = "");
+        err (fun () -> M.of_hex ~len:3 t);
+        err (fun () -> M.of_hex ~len:10 t);
+        err (fun () -> M.of_hex ~len:(-1) t);
+        let buf = Bytes.make 6 '.' in
+        M.of_hex_into t ~dst_off:1 buf;
+        check (Bytes.to_string buf = ".ABCD.");
+        err (fun () -> of_hex_with_dot t 3);
+        err (fun () -> of_hex_with_dot ~len:3 t 4);
+        err (fun () -> of_hex_with_dot ~len:10 t 8);
+        err (fun () -> of_hex_with_dot ~len:(-1) t 4);
+        err (fun () -> M.of_hex_into t ~dst_off:3 buf));
+    both "41 42\n" (fun t -> err (fun () -> of_hex_with_dot t 2));
+    both "41 42 43" (fun t ->
+        check (of_hex_with_dot t 3 = "ABC");
+        check (M.of_hex t = "ABC");
+        err (fun () -> of_hex_with_dot ~skip_whitespace:false t 3);
+        err (fun () -> M.of_hex ~skip_whitespace:false t));
+    both "4g" (fun t -> err (fun () -> of_hex_with_dot t 1));
+    both "414" (fun t -> err (fun () -> of_hex_with_dot t 2));
+    let t = embed "41" in
+    err (fun () -> of_hex_with_dot ~len:4 t 2);
+    err (fun () -> M.of_hex ~len:4 t);
+    err (fun () -> M.to_hex ~len:3 t);
+    let src = embed "\xde\xad\xbe\xef" in
+    let hex = M.to_hex src in
+    check (hex = "deadbeef");
+    both hex (fun t ->
+        check (of_hex_with_dot t 4 = "\xde\xad\xbe\xef");
+        check (M.of_hex t = "\xde\xad\xbe\xef"))
+
   let test_random name =
     let descr = {text|comparison with Bstr on random inputs|text} in
     Test.test ~title:(name ^ "-random") ~descr @@ fun () ->
@@ -487,7 +555,7 @@ module Make (M : Slice.S) = struct
     [
       test_base name; test_views name; test_numbers name; test_predicates name
     ; test_extract name; test_concat name; test_traversals name
-    ; test_copies name; test_random name
+    ; test_copies name; test_hex name; test_random name
     ]
 end
 
