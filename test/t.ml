@@ -1711,6 +1711,137 @@ let test85 =
   eq (Bstr.filter_map fn (s "banana")) "bnn";
   eq (Bstr.filter_map (fun chr -> Some chr) (s "banana")) "banana"
 
+let raises msg fn =
+  match fn () with
+  | _ -> check false
+  | exception Invalid_argument msg' -> check (msg = msg')
+  | exception _ -> check false
+
+let test86 =
+  let descr = {text|of_hex (from ohex)|text} in
+  Test.test ~title:"of_hex" ~descr @@ fun () ->
+  let tests =
+    [
+      ("", ""); ("41", "A"); ("41 41", "AA"); (" 41 41 ", "AA")
+    ; ("   414  1", "AA"); ("deadBEEF", "\xde\xad\xbe\xef")
+    ]
+  in
+  let fn (hex, v) =
+    let bstr = Bstr.of_string hex in
+    check (Bstr.of_hex bstr = v);
+    check (Bstr.of_hex ~skip_whitespace:true bstr = v);
+    let buf = Bytes.make (String.length v) '\x00' in
+    Bstr.of_hex_into ~skip_whitespace:true bstr buf;
+    check (Bytes.unsafe_to_string buf = v)
+  in
+  List.iter fn tests
+
+let test87 =
+  let descr = {text|of_hex with bad characters (from ohex)|text} in
+  Test.test ~title:"of_hex bad character" ~descr @@ fun () ->
+  let fn hex =
+    let bstr = Bstr.of_string hex in
+    raises "bad character" (fun () -> Bstr.of_hex bstr);
+    raises "bad character" (fun () -> Bstr.of_hex ~skip_whitespace:false bstr);
+    let buf = Bytes.create 16 in
+    raises "bad character" (fun () -> Bstr.of_hex_into bstr buf)
+  in
+  List.iter fn [ "W"; "AAWW"; "WWAA" ]
+
+let test88 =
+  let descr = {text|of_hex with leftover (from ohex)|text} in
+  Test.test ~title:"of_hex leftover" ~descr @@ fun () ->
+  let fn hex =
+    let bstr = Bstr.of_string hex in
+    raises "leftover byte in hex string" (fun () -> Bstr.of_hex bstr);
+    raises "leftover byte in hex string" (fun () ->
+        Bstr.of_hex ~skip_whitespace:false bstr);
+    let buf = Bytes.create 16 in
+    raises "leftover byte in hex string" (fun () ->
+        Bstr.of_hex_into ~skip_whitespace:false bstr buf)
+  in
+  List.iter fn [ "AAA"; "A" ]
+
+let test89 =
+  let descr = {text|of_hex without skipping whitespaces (from ohex)|text} in
+  Test.test ~title:"of_hex ~skip_whitespace:false" ~descr @@ fun () ->
+  let fn hex =
+    let bstr = Bstr.of_string hex in
+    raises "bad character" (fun () -> Bstr.of_hex ~skip_whitespace:false bstr);
+    let buf = Bytes.create 16 in
+    raises "bad character" (fun () ->
+        Bstr.of_hex_into ~skip_whitespace:false bstr buf)
+  in
+  List.iter fn [ " "; " AA"; "AA "; "A A" ]
+
+let test90 =
+  let descr = {text|to_hex (from ohex)|text} in
+  Test.test ~title:"to_hex" ~descr @@ fun () ->
+  let tests =
+    [
+      ("", ""); ("A", "41"); ("AA", "4141"); ("AAA", "414141")
+    ; ("\xde\xad\xbe\xef", "deadbeef")
+    ]
+  in
+  let fn (v, hex) =
+    let bstr = Bstr.of_string v in
+    check (Bstr.to_hex bstr = hex);
+    let buf = Bytes.make (String.length hex) '\x00' in
+    Bstr.to_hex_into bstr buf;
+    check (Bytes.unsafe_to_string buf = hex)
+  in
+  List.iter fn tests
+
+let test91 =
+  let descr = {text|of_hex (to_hex s) = s (from ohex)|text} in
+  Test.test ~title:"of_hex (to_hex s) = s" ~descr @@ fun () ->
+  let random_string () =
+    let len = Random.int 128 in
+    String.init len (fun _ -> Char.unsafe_chr (Random.int 256))
+  in
+  let acc = ref true in
+  for _ = 0 to 10_000 do
+    if !acc then begin
+      let input = random_string () in
+      let bstr = Bstr.of_string input in
+      let hex = Bstr.of_string (Bstr.to_hex bstr) in
+      acc := !acc && Bstr.of_hex hex = input;
+      acc := !acc && Bstr.of_hex ~skip_whitespace:false hex = input;
+      let buf = Bytes.create (String.length input * 2) in
+      Bstr.to_hex_into bstr buf;
+      let out = Bytes.create (String.length input) in
+      Bstr.of_hex_into (Bstr.of_string (Bytes.unsafe_to_string buf)) out;
+      acc := !acc && Bytes.unsafe_to_string out = input
+    end
+  done;
+  check !acc
+
+let test92 =
+  let descr = {text|to_hex/of_hex with offsets and lengths|text} in
+  Test.test ~title:"hex with offsets" ~descr @@ fun () ->
+  let bstr = Bstr.of_string "xxABCDyy" in
+  check (Bstr.to_hex ~off:2 ~len:4 bstr = "41424344");
+  check (Bstr.to_hex ~off:6 bstr = "7979");
+  check (Bstr.to_hex ~off:8 bstr = "");
+  let buf = Bytes.make 12 '.' in
+  Bstr.to_hex_into ~src_off:2 ~len:4 bstr ~dst_off:2 buf;
+  check (Bytes.unsafe_to_string buf = "..41424344..");
+  raises "Bstr.to_hex" (fun () -> Bstr.to_hex ~off:(-1) bstr);
+  raises "Bstr.to_hex" (fun () -> Bstr.to_hex ~off:4 ~len:5 bstr);
+  raises "Bstr.to_hex" (fun () -> Bstr.to_hex ~off:9 bstr);
+  raises "Bstr.to_hex_into" (fun () ->
+      Bstr.to_hex_into ~src_off:2 ~len:4 bstr ~dst_off:5 buf);
+  let hex = Bstr.of_string "zz41424344zz" in
+  check (Bstr.of_hex ~off:2 ~len:8 hex = "ABCD");
+  check (Bstr.of_hex ~off:10 ~len:0 hex = "");
+  let buf = Bytes.make 6 '.' in
+  Bstr.of_hex_into ~src_off:2 ~len:8 hex ~dst_off:1 buf;
+  check (Bytes.unsafe_to_string buf = ".ABCD.");
+  raises "Bstr.of_hex" (fun () -> Bstr.of_hex ~off:(-1) hex);
+  raises "Bstr.of_hex" (fun () -> Bstr.of_hex ~off:8 ~len:8 hex);
+  raises "Bstr.of_hex_into" (fun () ->
+      Bstr.of_hex_into ~src_off:2 ~len:8 hex ~dst_off:3 buf)
+
 let ( / ) = Filename.concat
 
 let () =
@@ -1725,7 +1856,8 @@ let () =
     ; test55; test56; test57; test58; test59; test60; test61; test62; test63
     ; test64; test65; test66; test67; test68; test69; test70; test71; test72
     ; test73; test74; test75; test76; test77; test78; test79; test80; test81
-    ; test82; test83; test84; test85
+    ; test82; test83; test84; test85; test86; test87; test88; test89; test90
+    ; test91; test92
     ]
   in
   let ({ Test.directory } as runner) = Test.runner (Sys.getcwd () / "_tests") in

@@ -2,6 +2,8 @@
  * Copyright (c) 2015 The astring programmers
  * SPDX-License-Identifier: ISC
  * Copyright (c) 2024 Romain Calascibetta <romain.calascibetta@gmail.com>
+ * Copyright (c) 2024 Hannes Mehnert
+ * SPDX-License-Identifier: BSD-2-Clause
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -1007,3 +1009,85 @@ let[@inline always] unsafe_memcmp src ~src_off dst ~dst_off ~len =
 
 let[@inline always] unsafe_equal src ~src_off dst ~dst_off ~len =
   unsafe_memcmp src ~src_off dst ~dst_off ~len == 0
+
+let tab = "0123456789abcdef"
+
+let to_hex_into ?(src_off = 0) ?len t ?(dst_off = 0) buf =
+  let len = match len with Some len -> len | None -> length t - src_off in
+  if src_off < 0 || len < 0 || src_off > length t - len then
+    invalid_arg "Bstr.to_hex_into";
+  let dst_len = len * 2 in
+  if dst_off < 0 || Bytes.length buf - dst_off < dst_len then
+    invalid_arg "Bstr.to_hex_into";
+  let fn idx chr =
+    let hi, lo =
+      let value = int_of_char chr in
+      (tab.[value lsr 4], tab.[value land 0x0f])
+    in
+    Bytes.set buf ((idx * 2) + dst_off) hi;
+    Bytes.set buf ((idx * 2) + dst_off + 1) lo
+  in
+  for idx = 0 to len - 1 do
+    fn idx (unsafe_get t (src_off + idx))
+  done
+
+let to_hex ?(off = 0) ?len t =
+  let len = match len with Some len -> len | None -> length t - off in
+  if off < 0 || len < 0 || off > length t - len then invalid_arg "Bstr.to_hex";
+  let buf = Bytes.create (len * 2) in
+  to_hex_into ~src_off:off ~len t ~dst_off:0 buf;
+  Bytes.unsafe_to_string buf
+
+let digit = function
+  | '0' .. '9' as chr -> int_of_char chr - 0x30
+  | 'A' .. 'F' as chr -> int_of_char chr - 0x41 + 10
+  | 'a' .. 'f' as chr -> int_of_char chr - 0x61 + 10
+  | _ -> invalid_arg "bad character"
+
+let is_space = function ' ' | '\n' | '\r' | '\t' -> true | _ -> false
+
+let req_length ?(src_off = 0) ?(skip_whitespace = true) t ~len =
+  let fn acc chr =
+    if skip_whitespace && is_space chr then acc
+    else begin
+      ignore (digit chr);
+      succ acc
+    end
+  in
+  let acc = ref 0 in
+  for idx = 0 to len - 1 do
+    acc := fn !acc (unsafe_get t (src_off + idx))
+  done;
+  let req = !acc in
+  if req mod 2 = 0 then req / 2 else invalid_arg "leftover byte in hex string"
+
+let of_hex_into ?(skip_whitespace = true) ?(src_off = 0) ?len t ?(dst_off = 0)
+    buf =
+  let len = match len with Some len -> len | None -> length t - src_off in
+  if src_off < 0 || len < 0 || src_off > length t - len then
+    invalid_arg "Bstr.of_hex_into";
+  let dst_len = req_length ~src_off ~skip_whitespace ~len t in
+  if dst_off < 0 || Bytes.length buf - dst_off < dst_len then
+    invalid_arg "Bstr.of_hex_into";
+  let leftover = ref None in
+  let dst_off = ref dst_off in
+  for idx = 0 to len - 1 do
+    let chr = unsafe_get t (src_off + idx) in
+    if not (skip_whitespace && is_space chr) then begin
+      let code = digit chr in
+      match !leftover with
+      | None -> leftover := Some (code lsl 4)
+      | Some code' ->
+          leftover := None;
+          Bytes.set_uint8 buf !dst_off (code' lor code);
+          incr dst_off
+    end
+  done
+
+let of_hex ?skip_whitespace ?(off = 0) ?len t =
+  let len = match len with Some len -> len | None -> length t - off in
+  if off < 0 || len < 0 || off > length t - len then invalid_arg "Bstr.of_hex";
+  let dst_len = req_length ~src_off:off ?skip_whitespace ~len t in
+  let buf = Bytes.create dst_len in
+  of_hex_into ?skip_whitespace ~src_off:off ~len t ~dst_off:0 buf;
+  Bytes.unsafe_to_string buf
