@@ -779,10 +779,18 @@ let of_seq seq =
   Seq.iter (Buffer.add_char buf) seq;
   of_string (Buffer.contents buf)
 
-let to_hex_into slice ?len ?dst_off buf =
-  let { Slice.buf= t; off= src_off; _ } = slice in
-  S.to_hex_into ~src_off ?len t ?dst_off buf
+let to_hex_into slice ?len:user's_len ?dst_off buf =
+  let { Slice.buf= t; off= src_off; len } = slice in
+  let len = match user's_len with
+    | Some len -> len
+    | None -> len in
+  if len > slice.len then invalid_arg "Slice.to_hex_into";
+  S.to_hex_into ~src_off ~len t ?dst_off buf
 
-let of_hex_into ?skip_whitespace slice ?len ?dst_off buf =
-  let { Slice.buf= t; off= src_off; _ } = slice in
-  S.of_hex_into ?skip_whitespace ~src_off ?len t ?dst_off buf
+let of_hex_into ?skip_whitespace slice ?len:user's_len ?dst_off buf =
+  let { Slice.buf= t; off= src_off; len } = slice in
+  let len = match user's_len with
+    | Some len -> len
+    | None -> len in
+  if len > slice.len then invalid_arg "Slice.of_hex_into";
+  S.of_hex_into ?skip_whitespace ~src_off ~len t ?dst_off buf
