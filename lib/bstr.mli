@@ -742,7 +742,19 @@ val of_seq : char Seq.t -> t
 (** Create a bigstring from the generator. *)
 
 val to_hex_into : ?src_off:int -> ?len:int -> t -> ?dst_off:int -> bytes -> unit
+(** [to_hex_into ?src_off ?len t ?dst_off dst] encodes [t] into [dst] starting
+    at [dst_off] (defaults to 0). Each character is encoded as two hex digits in
+    [dst]. *)
+
 val to_hex : ?off:int -> ?len:int -> t -> string
+(** [to_hex ?off ?len t] encodes [t] into a freshly allocated string of double
+    size, where each character in [t] is encoded as two hex digits in the
+    returned string. An example:
+
+    {[
+      # Bstr.to_hex (Bstr.of_string "AB")
+      - : string = "4142"
+    ]} *)
 
 val of_hex_into :
      ?skip_whitespace:bool
@@ -752,8 +764,27 @@ val of_hex_into :
   -> ?dst_off:int
   -> bytes
   -> unit
+(** [of_hex_into ~skip_whitespace ?src_off ?len t ?dst_off dst] decodes [t] into
+    [dst] starting at [dst_off] (defaults to 0). The argument [skip_whitespace]
+    defaults to [true] and skips any whitespaces characters.
+
+    @raise Invalid_argument
+      if any character in [t] is not a hex character, an odd amount of
+      characters are present or [dst] des not contain enough space. *)
 
 val of_hex : ?skip_whitespace:bool -> ?off:int -> ?len:int -> t -> string
+(** [of_hex ~skip_whitespace t] decodes a hex string [t] into a sequence of
+    octets. The argument [skip_whitespace] defaults to [true], and skips any
+    whitespace characters in [t] (' ', '\n', '\r', '\t'). An example:
+
+    {[
+      # Bstr.of_hex (Bstr.of_string "4142")
+      - : string = "AB"
+    ]}
+
+    @raise Invalid_argument
+      if any character in [t] is not a hex character or an odd amount of
+      characters are present. *)
 
 (**/**)
 

@@ -1044,7 +1044,7 @@ let digit = function
   | 'a' .. 'f' as chr -> int_of_char chr - 0x61 + 10
   | _ -> invalid_arg "bad character"
 
-let is_space = ( = ) ' '
+let is_space = function ' ' | '\n' | '\r' | '\t' -> true | _ -> false
 
 let req_length ?(src_off = 0) ?(skip_whitespace = true) t ~len =
   let fn acc chr =
