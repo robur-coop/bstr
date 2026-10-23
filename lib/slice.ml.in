@@ -807,6 +807,7 @@ let of_hex ?skip_whitespace ?len slice =
   let len = match len with
     | Some len -> len
     | None -> slice.len in
+  if len < 0 || len > slice.len then invalid_arg "Slice.of_hex";
   let { Slice.off= src_off; _ } = slice in
   let dst_len = S.req_length ~src_off ?skip_whitespace ~len slice.buf in
   let buf = Bytes.create dst_len in
