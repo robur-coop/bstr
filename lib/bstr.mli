@@ -754,3 +754,7 @@ val of_hex_into :
   -> unit
 
 val of_hex : ?skip_whitespace:bool -> ?off:int -> ?len:int -> t -> string
+
+(**/**)
+
+val req_length : ?src_off:int -> ?skip_whitespace:bool -> t -> len:int -> int

@@ -787,6 +787,14 @@ let to_hex_into slice ?len:user's_len ?dst_off buf =
   if len > slice.len then invalid_arg "Slice.to_hex_into";
   S.to_hex_into ~src_off ~len t ?dst_off buf
 
+let to_hex ?len slice =
+  let len = match len with
+    | Some len -> len
+    | None -> slice.len in
+  let buf = Bytes.create (len * 2) in
+  to_hex_into slice ~len ~dst_off:0 buf;
+  Bytes.unsafe_to_string buf
+
 let of_hex_into ?skip_whitespace slice ?len:user's_len ?dst_off buf =
   let { Slice.buf= t; off= src_off; len } = slice in
   let len = match user's_len with
@@ -794,3 +802,13 @@ let of_hex_into ?skip_whitespace slice ?len:user's_len ?dst_off buf =
     | None -> len in
   if len > slice.len then invalid_arg "Slice.of_hex_into";
   S.of_hex_into ?skip_whitespace ~src_off ~len t ?dst_off buf
+
+let of_hex ?skip_whitespace ?len slice =
+  let len = match len with
+    | Some len -> len
+    | None -> slice.len in
+  let { Slice.off= src_off; _ } = slice in
+  let dst_len = S.req_length ~src_off ?skip_whitespace ~len slice.buf in
+  let buf = Bytes.create dst_len in
+  of_hex_into ?skip_whitespace slice ~len ~dst_off:0 buf;
+  Bytes.unsafe_to_string buf
