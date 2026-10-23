@@ -484,7 +484,7 @@ module Make (M : Slice.S) = struct
         err (fun () -> of_hex_with_dot ~len:10 t 8);
         err (fun () -> of_hex_with_dot ~len:(-1) t 4);
         err (fun () -> M.of_hex_into t ~dst_off:3 buf));
-    both "41 42\n" (fun t -> err (fun () -> of_hex_with_dot t 2));
+    both "41 42!" (fun t -> err (fun () -> of_hex_with_dot t 2));
     both "41 42 43" (fun t ->
         check (of_hex_with_dot t 3 = "ABC");
         check (M.of_hex t = "ABC");
