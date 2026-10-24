@@ -1,3 +1,13 @@
+### v0.1.2 (2026-10-23)
+
+- Add some tests about OSEC-2026-20 (@dinosaure, [#23][23])
+- Avoid overflow when we encode `{,u}int8` & `{u,}int16{be,le,ne}` (@dinosaure, [#24][24])
+- Add `Bstr.{to,of}_hex{,_into}` and the same for slices (@dinosaure, [#25][25])
+
+[23]: https://git.robur.coop/robur/bstr/pulls/23
+[24]: https://git.robur.coop/robur/bstr/pulls/24
+[25]: https://git.robur.coop/robur/bstr/pulls/25
+
 ### v0.1.1 (2026-09-07)
 
 - Fix our `cases` combinator (@dinosaure, [#20][20])
