@@ -1,3 +1,9 @@
+### v0.1.3 (2026-10-27)
+
+- Fix the debian support (@glondu, [#6][gh6])
+
+[gh6]: https://github.com/robur-coop/bstr/pull/6
+
 ### v0.1.2 (2026-10-23)
 
 - Add some tests about OSEC-2026-20 (@dinosaure, [#23][23])
